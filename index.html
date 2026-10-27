@@ -1,0 +1,1673 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Line Swap Clock</title>
+<meta name="theme-color" content="#1590CC">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Swap Clock">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<script>window.SWAP_OFFLINE = true;</script>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one narrow sideline column — sticky match clock on top, one card per swap line below */
+:root{
+  --bg:#EDF2F6; --surface:#FFFFFF; --ink:#0E1D2A; --muted:#566878; --line:#D0DAE3;
+  --accent:#1590CC; --accent-ink:#FFFFFF;
+  --warn:#E89B00; --warn-soft:#FFF3D6; --due:#D11F3A; --due-soft:#FFE3E7; --ok:#18905F;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0A151F; --surface:#122230; --ink:#E6EFF5; --muted:#8EA2B3; --line:#23394B;
+  --accent:#44B6EA; --accent-ink:#03121D;
+  --warn:#FFBE3B; --warn-soft:#3A2D0E; --due:#FF5C72; --due-soft:#3D1620; --ok:#3CCB8F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0A151F; --surface:#122230; --ink:#E6EFF5; --muted:#8EA2B3; --line:#23394B;
+  --accent:#44B6EA; --accent-ink:#03121D;
+  --warn:#FFBE3B; --warn-soft:#3A2D0E; --due:#FF5C72; --due-soft:#3D1620; --ok:#3CCB8F; color-scheme:dark}
+
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:16px;line-height:1.4}
+*{box-sizing:border-box}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* top bar */
+.top{position:relative;background:var(--surface);border-bottom:1px solid var(--line);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px)) 12px}
+/* slim bar that takes over once the big header has scrolled away */
+.mini{position:fixed;left:0;right:0;top:0;z-index:6;display:flex;align-items:center;gap:10px;background:var(--surface);border-bottom:1px solid var(--line);
+  padding:calc(env(safe-area-inset-top,0px) + 6px) max(16px,env(safe-area-inset-right,0px)) 6px max(16px,env(safe-area-inset-left,0px));box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.mini .mclock{font-family:var(--display);font-weight:700;font-size:24px;line-height:1}
+.mini .mq{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.mini .mnext{flex:1;min-width:0;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .mgo{border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;padding:8px 14px;flex:none}
+.mini .mgo.pause{background:var(--ink);color:var(--surface)}
+.tabs{display:flex;gap:4px;margin-bottom:10px;overflow-x:auto}
+.tab{border:0;background:transparent;padding:6px 10px;border-radius:6px;font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--surface)}
+.clockrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.clock{font-family:var(--display);font-weight:700;font-size:56px;line-height:.9;letter-spacing:.01em}
+.qlabel{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.clockmeta{display:flex;flex-direction:column;gap:4px}
+.adj{display:flex;gap:4px}
+.adj button{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:2px 8px;font-size:13px;font-weight:600}
+.go{margin-left:auto;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.05em;text-transform:uppercase;padding:14px 22px;min-width:130px}
+.go.pause{background:var(--ink);color:var(--surface)}
+.next{margin-top:10px;font-size:15px;color:var(--muted);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.next b{color:var(--ink)}
+.next .clash{color:var(--due);font-weight:600}
+
+.banner{margin-top:14px;padding:12px 14px;border-radius:10px;background:var(--warn-soft);border:1px solid var(--warn);font-weight:500}
+.undo{margin-top:12px;display:flex;justify-content:flex-end}
+.undo button{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 12px;font-size:14px;font-weight:600}
+
+/* track cards */
+.cards{display:grid;gap:12px;margin-top:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-left:10px solid var(--tc);border-radius:12px;padding:12px 14px 14px;display:grid;gap:10px;transition:background .2s}
+.card.soon{background:var(--warn-soft);border-color:var(--warn);border-left-color:var(--tc)}
+.card.due{background:var(--due-soft);border-color:var(--due);border-left-color:var(--tc)}
+.card.due .count{color:var(--due)}
+@media (prefers-reduced-motion:no-preference){.card.due{animation:pulse 1s ease-in-out infinite}}
+@keyframes pulse{50%{box-shadow:0 0 0 4px var(--due)}}
+.card-h{display:flex;align-items:center;gap:10px}
+.chip{background:var(--tc);color:var(--tink);font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:5px}
+.state{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.card.soon .state{color:var(--warn)}.card.due .state{color:var(--due)}
+.breaktag{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:1px 6px}
+.count{margin-left:auto;font-family:var(--display);font-weight:700;font-size:40px;line-height:1}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--tc);width:0}
+.swap{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.swap > div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.who{display:flex;gap:8px;align-items:center;min-width:0}
+.av{width:80px;height:80px;border-radius:50%;object-fit:cover;flex:none;background:var(--bg);border:2px solid var(--tc,var(--line))}
+.av.sm{width:34px;height:34px;border-radius:50%;border-width:1px}
+.av.ph{display:inline-grid;place-items:center;font-weight:700;font-size:14px;color:var(--muted)}
+.avbtn{cursor:pointer;display:block;line-height:0;border:0;background:none;padding:0}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0);pointer-events:none}
+.avbtn .av{width:60px;height:60px}
+.sq .av{width:60px;height:60px}
+.import{background:var(--surface);border:1px dashed var(--accent);border-radius:12px;padding:12px 14px;margin-top:12px;display:grid;gap:8px}
+.skips{display:flex;flex-wrap:wrap;gap:8px}
+.squad{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.sq{display:flex;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;min-width:0}
+.sq input[type=text]{padding:6px 8px;font-size:15px}
+.sq button{border:1px solid var(--line);background:var(--bg);border-radius:8px;height:34px;width:34px;flex:none}
+.skip{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:var(--muted);width:56px;text-align:center}
+.lbl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.swap b{font-size:20px;font-weight:700;overflow-wrap:anywhere}
+.in .lbl::before{content:"▲ ";color:var(--ok)}
+.out .lbl::before{content:"▼ ";color:var(--due)}
+.roster{display:flex;flex-wrap:wrap;gap:6px}
+.pl{display:flex;align-items:center;gap:6px;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:2px 10px 2px 3px;color:var(--muted)}
+.pl .o{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--bg);color:var(--ink);font-weight:700;font-size:12px}
+.pl.bench{border-color:var(--tc);color:var(--ink);font-weight:600}
+.pl.bench .o{background:var(--tc);color:var(--tink)}
+.btn-swap{border:0;border-radius:10px;padding:14px;font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.06em;text-transform:uppercase;background:var(--bg);color:var(--ink);border:2px solid var(--line)}
+.card.soon .btn-swap{border-color:var(--warn)}
+.card.due .btn-swap{background:var(--due);border-color:var(--due);color:#fff}
+.card.called{border-color:var(--accent);border-left-color:var(--tc)}
+.card.called .state,.card.called .count{color:var(--accent)}
+.card.called .btn-swap{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.subrow{display:flex;gap:6px;flex-wrap:wrap}
+.subrow .btn-sub{padding:8px 12px}
+.btn-swap.armed,.btn-sub.armed{background:var(--warn);border-color:var(--warn);color:#111}
+.btn-swap:disabled{opacity:.55;cursor:not-allowed}
+.cardrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;font-weight:600}
+.cchip{width:14px;height:18px;border-radius:2px;display:inline-block;flex:none;border:1px solid rgba(0,0,0,.2)}
+.cchip.green{background:#1E9E4A}.cchip.yellow{background:#F5C400}.cchip.red{background:#D7262F}
+.cardbtn.green{border-color:#1E9E4A}.cardbtn.yellow{border-color:#F5C400}.cardbtn.red{border-color:#D7262F}
+.inj.cardp{border-color:var(--warn)}
+.banner.practice{background:var(--bg);border-color:var(--accent)}
+.fsbtn{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap;align-self:center}
+.offline:not(.has-key) .needs-claude,.offline #syncstat{display:none!important}
+.syncstat{margin-left:auto;align-self:center;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;padding-left:8px}
+.syncstat[data-st="saved"]{color:var(--ok)}.syncstat[data-st="error"]{color:var(--due)}
+.log{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;max-height:320px;overflow:auto}
+.log li{display:flex;gap:10px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:14px}
+.log li span{color:var(--muted);flex:none;min-width:72px}
+.reportbox{width:100%;min-height:180px;font:inherit;font-size:14px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);margin-top:8px}
+.matches{display:grid;gap:6px;margin-top:10px}
+.match{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px}
+.check{display:flex;gap:10px;align-items:flex-start;margin-top:12px;max-width:65ch}
+.check input{width:20px;height:20px;flex:none;margin-top:2px}
+.others{display:grid;gap:8px}
+.prow.orow{grid-template-columns:60px 1fr 116px 34px}
+.inj{display:grid;gap:8px;padding:10px;border-radius:10px;background:var(--bg);border:1px solid var(--due)}
+.injrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;font-weight:600;color:var(--due)}
+.injrow .btn-sub{padding:6px 10px}
+.pl.inj{text-decoration:line-through;opacity:.6;background:none;border-color:var(--line)}
+.btn-sub{border:2px solid var(--line);background:transparent;border-radius:10px;padding:0 14px;font-weight:600;font-size:14px;color:var(--muted)}
+
+/* plan */
+h2{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.02em;margin:22px 0 6px;text-wrap:balance}
+p.lead{margin:0 0 12px;color:var(--muted);max-width:65ch}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:120px}
+.stat b{display:block;font-family:var(--display);font-size:26px;line-height:1.1}
+.stat.bad b{color:var(--due)}.stat.good b{color:var(--ok)}
+.planbox{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;overflow-x:auto}
+.planbox svg{display:block;width:100%;min-width:560px;height:auto}
+.planbox text{fill:var(--muted);font-family:var(--body);font-size:13px}
+.planbox .tn{fill:var(--ink);font-weight:600}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 14px;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--due);border-color:var(--due)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* minutes */
+.tbl{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tbl th,.tbl td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:15px}
+.tbl th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.tbl td.r,.tbl th.r{text-align:right}
+.tbl .sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--tc);margin-right:6px}
+.tblwrap{overflow-x:auto}
+
+/* setup */
+.tset{background:var(--surface);border:1px solid var(--line);border-left:10px solid var(--tc);border-radius:12px;padding:12px 14px;margin-top:12px;display:grid;gap:10px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+input[type=text],input[type=number]{font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+select{font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.schedname{margin:12px 0 0;font-size:14px;color:var(--muted)}
+.schedname b{color:var(--ink)}
+input[type=color]{width:44px;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:2px}
+.prow{display:grid;grid-template-columns:20px 60px 1fr 60px 34px 34px;gap:6px;align-items:center}
+.prow .o{font-family:var(--display);font-weight:700;font-size:20px;text-align:center}
+.prow button{border:1px solid var(--line);background:var(--bg);border-radius:8px;height:40px}
+.trow{display:grid;grid-template-columns:1fr 44px 120px;gap:8px;align-items:end}
+.note{font-size:14px;color:var(--muted)}
+.hdr{display:grid;grid-template-columns:20px 60px 1fr 60px 34px 34px;gap:6px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.hdr span:nth-child(1){text-align:center}
+@media (max-width:420px){.prow,.hdr{grid-template-columns:20px 50px 1fr 56px 32px 32px}.prow.orow{grid-template-columns:50px 1fr 104px 32px}.avbtn .av,.sq .av{width:50px;height:50px}.swap .who{flex-direction:column;align-items:flex-start;gap:4px}}
+@media (max-width:420px){.clock{font-size:46px}.go{min-width:0;padding:12px 16px;font-size:19px}.count{font-size:34px}}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="tabs" role="tablist">
+      <button class="tab" data-act="tab" data-v="game" role="tab">Game</button>
+      <button class="tab" data-act="tab" data-v="plan" role="tab">Plan</button>
+      <button class="tab" data-act="tab" data-v="minutes" role="tab">Minutes</button>
+      <button class="tab" data-act="tab" data-v="setup" role="tab">Setup</button>
+      <span class="syncstat" id="syncstat" data-st="local">On this phone only</span>
+      <button class="fsbtn" id="fsbtn" data-act="fullscreen" hidden>Full screen</button>
+    </div>
+    <div class="clockrow">
+      <div class="clockmeta">
+        <span class="qlabel" id="qlabel">Q1</span>
+        <span class="clock num" id="clock">0:00</span>
+        <div class="adj"><button data-act="adj" data-d="-10">−10s</button><button data-act="adj" data-d="-1">−1s</button><button data-act="adj" data-d="1">+1s</button><button data-act="adj" data-d="10">+10s</button></div>
+      </div>
+      <button class="go" id="go" data-act="go">Start</button>
+    </div>
+    <div class="next num" id="next"></div>
+    <div class="mini" id="mini" hidden><span class="mq" id="mq">Q1</span><span class="mclock num" id="mclock">0:00</span><span class="mnext num" id="mnext"></span><button class="mgo" id="mgo" data-act="go">Start</button></div>
+  </div>
+
+  <section id="v-game"></section>
+  <section id="v-plan" hidden></section>
+  <section id="v-minutes" hidden></section>
+  <section id="v-setup" hidden></section>
+</div>
+
+<script>
+(function(){
+const LS = 'lineSwapClock.v1';
+const OFFLINE = !!window.SWAP_OFFLINE; // set by the installable offline build
+if(OFFLINE) document.documentElement.classList.add('offline');
+let db = null, dl = null, applyingRemote = false;
+const sync = {last:{}, ready:false, running:false, dirty:false, timer:null, got:new Set(), status:'local'};
+const CLASH = 30;      // seconds: two lines swapping closer than this is a clash
+const SOON = 30;       // seconds: heads-up before a swap
+const BREAK_PULL = 120;// seconds: at a quarter break, offer swaps due this soon into the next quarter
+
+// Example schedule read from the BRAX – LEOP board. Big number = bench minutes, order = small number.
+const DEFAULT_SETUP = {
+  quarterMin: 17.5, quarters: 4,
+  tracks: [
+    {id:'red',    name:'Red',    color:'#E3262B', offset:0, players:[{name:'Red 1',bench:3},{name:'Red 2',bench:3},{name:'Red 3',bench:3}]},
+    {id:'pink',   name:'Pink',   color:'#E8408F', offset:0, players:[{name:'Loui',bench:6},{name:'Pink 2',bench:4}]},
+    {id:'yellow', name:'Yellow', color:'#F2CE00', offset:0, players:[{name:'Yellow 1',bench:4},{name:'Yellow 2',bench:2},{name:'Yellow 3',bench:2},{name:'Yellow 4',bench:2}]},
+    {id:'blue',   name:'Blue',   color:'#155489', offset:0, players:[{name:'Blue 1',bench:3},{name:'Blue 2',bench:3},{name:'Blue 3',bench:2},{name:'Blue 4',bench:2}]}
+  ]
+};
+
+const clone = o => JSON.parse(JSON.stringify(o));
+function newGame(setup){
+  const tr = {}, acc = {};
+  setup.tracks.forEach(t => {
+    tr[t.id] = {benchIdx:0, benchSince:0, extra:+t.offset||0, swaps:[], alert:{}, called:null};
+    acc[t.id] = t.players.map(() => 0);
+  });
+  return {phase:'pre', clockBase:0, runStart:null, quarter:1, tr, acc, history:[], log:[], speed:1};
+}
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(LS));
+    if(s && s.game){
+      if(!s.schedules && s.setup){ if(+s.setup.quarterMin === 15) s.setup.quarterMin = 17.5; s.schedules = [{id:'s1', name:'BRAX - LEOP', setup:s.setup}]; s.activeId = 's1'; delete s.setup; }
+      if(s.schedules && s.schedules.length) return s;
+    } }catch(e){}
+  return null;
+}
+function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} queueSync(); }
+
+const LOADED = load(), FRESH = !LOADED;
+let S = LOADED || {schedules:[{id:'s1', name:'BRAX - LEOP', setup:clone(DEFAULT_SETUP)}], activeId:'s1', game:newGame(DEFAULT_SETUP), view:'game'};
+S.matches = S.matches || []; S.settings = Object.assign({confirm:true}, S.settings);
+if(!S.game.log) S.game.log = [];
+const sched = () => S.schedules.find(x => x.id === S.activeId) || S.schedules[0];
+const G = () => S.game, U = () => sched().setup;
+
+// ---------- squad: one entry per real person, linking a face to a name across schedules ----------
+function uid(){ return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function isRealName(n){ n = String(n || '').trim(); return !!n && !/^\S+ \d+$/.test(n); }
+function allPlayers(){ const out = []; S.schedules.forEach(sc => { sc.setup.tracks.forEach(t => t.players.forEach(p => out.push(p))); (sc.others || []).forEach(p => out.push(p)); }); return out; }
+// Schedules saved online point at the squad photo instead of repeating it ('@squad').
+function photoOf(p){ return p.photo === '@squad' ? ((S.squad && S.squad[p.pid] && S.squad[p.pid].photo) || '') : (p.photo || ''); }
+function squadByName(nm, except){ nm = String(nm).trim().toLowerCase(); return Object.keys(S.squad).find(k => k !== except && S.squad[k].name.trim().toLowerCase() === nm); }
+function ensureSquad(){
+  S.squad = S.squad || {};
+  allPlayers().forEach(p => {
+    if(p.pid) return;
+    const hit = isRealName(p.name) && squadByName(p.name);
+    p.pid = hit || uid();
+    if(!hit && isRealName(p.name)) S.squad[p.pid] = {name:p.name.trim(), photo:p.photo || ''};
+  });
+}
+// Called when a player's name is committed: link the face to that name everywhere.
+function couple(p){
+  ensureSquad();
+  if(!isRealName(p.name)) return;
+  const nm = p.name.trim(), other = squadByName(nm, p.pid);
+  if(other){
+    const old = p.pid;
+    allPlayers().forEach(q => { if(q.pid === old){ q.pid = other; q.name = S.squad[other].name; } });
+    if(!S.squad[other].photo && p.photo) S.squad[other].photo = p.photo;
+    addSig(S.squad[other], p.sig); delete p.sig;
+    delete S.squad[old];
+  } else {
+    const prev = S.squad[p.pid];
+    S.squad[p.pid] = {name:nm, photo:(prev && prev.photo) || p.photo || '', sigs:(prev && prev.sigs) || []};
+    addSig(S.squad[p.pid], p.sig); delete p.sig;
+    allPlayers().forEach(q => { if(q.pid === p.pid) q.name = nm; });
+  }
+}
+ensureSquad();
+// The running game must belong to the schedule in use. If they don't match (for example the live game
+// arrived from another phone before its schedule did), switch to the schedule the game belongs to,
+// or start a fresh game when none fits, instead of drawing a game that doesn't fit and crashing.
+function ensureGameFits(){
+  const g = S.game, fits = sc => sc && sc.setup.tracks.length && sc.setup.tracks.every(t => g && g.tr && g.tr[t.id] && g.acc && g.acc[t.id] && g.acc[t.id].length === t.players.length);
+  if(!sched().setup.tracks.length || fits(sched())) return false;
+  const owner = S.schedules.find(fits);
+  if(owner) S.activeId = owner.id; else S.game = newGame(U());
+  return true;
+}
+// Two squad entries with the same name (one made on a phone before its online copy arrived) become one.
+function mergeSquadDuplicates(){
+  const byName = {};
+  Object.keys(S.squad).forEach(k => { const n = String(S.squad[k].name || '').trim().toLowerCase(); if(n) (byName[n] = byName[n] || []).push(k); });
+  Object.values(byName).forEach(ids => {
+    if(ids.length < 2) return;
+    const rank = k => (S.squad[k].photo ? 2 : 0) + ((S.squad[k].sigs || []).length ? 1 : 0);
+    ids.sort((a, b) => rank(b) - rank(a));
+    const keep = ids[0];
+    ids.slice(1).forEach(k => { (S.squad[k].sigs || []).forEach(sg => addSig(S.squad[keep], sg)); allPlayers().forEach(p => { if(p.pid === k) p.pid = keep; }); delete S.squad[k]; });
+  });
+}
+ensureGameFits();
+// A squad member with a clean photo shows it everywhere. The board picture it replaces is kept once as
+// that player's board-style reference ("ref"), which is what new boards get compared with.
+function syncSquadPhotos(){
+  let changed = false;
+  allPlayers().forEach(p => {
+    const sq = p.pid && S.squad[p.pid]; if(!sq) return;
+    const ph = p.photo;
+    if(ph && ph !== '@squad' && ph !== sq.photo && !sq.ref){ sq.ref = ph; changed = true; }
+    if(sq.clean && sq.photo && ph !== '@squad' && ph !== sq.photo){ p.photo = sq.photo; changed = true; }
+  });
+  return changed;
+}
+syncSquadPhotos();
+
+// ---------- time ----------
+const qLen = () => Math.max(1, +U().quarterMin || 17.5) * 60;
+const total = () => qLen() * Math.max(1, +U().quarters || 4);
+function now(){ const g = G(); return g.clockBase + (g.runStart ? (Date.now() - g.runStart) / 1000 * (g.speed || 1) : 0); }
+const qEnd = () => G().quarter * qLen();
+function fmt(s){ s = Math.max(0, Math.floor(s)); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+const benchMin = p => Math.max(0.25, +p.bench || 0);
+
+function track(id){ return U().tracks.find(t => t.id === id); }
+// The person filling a rotation spot right now: a reserve covering an injury, or the scheduled player.
+function slot(t, k){ const s = G().tr[t.id], sub = s.subs && s.subs[k]; return sub ? {name:sub.name, photo:sub.photo, bench:t.players[k].bench, sub:true} : t.players[k]; }
+// A carded bench player can't come on until the card is over; a red card on the bench stops the line.
+function halted(s){ return s.benchIdx == null || !!(s.cards && s.cards[s.benchIdx] && s.cards[s.benchIdx].until == null); }
+function due(t){
+  const s = G().tr[t.id]; if(halted(s)) return Infinity;
+  const base = s.benchSince + benchMin(t.players[s.benchIdx]) * 60 + (s.extra || 0), c = s.cards && s.cards[s.benchIdx];
+  return c ? Math.max(base, c.until) : base;
+}
+// The player coming off is the next one in order who isn't off the field with a card.
+function inOut(t){
+  const s = G().tr[t.id], n = t.players.length; let o = (s.benchIdx + 1) % n;
+  for(let j = 0; j < n && s.cards && s.cards[o] && o !== s.benchIdx; j++) o = (o + 1) % n;
+  return {i:s.benchIdx, o};
+}
+function qtime(t){ const q = Math.min(Math.floor(t / qLen()) + 1, +U().quarters || 4); return `Q${q} ${fmt(t - (q - 1) * qLen())}`; }
+function logEv(text){ const g = G(); g.log = g.log || []; g.log.push({t:Math.min(now(), total()), text}); if(g.log.length > 400) g.log.shift(); }
+
+// ---------- sound / buzz / screen ----------
+let ac = null, wake = null;
+function ensureAudio(){ try{ ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume && ac.resume(); }catch(e){} }
+function beep(n, f){
+  if(!ac) return;
+  try{ for(let k=0;k<n;k++){ const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime + k*0.22;
+    o.frequency.value = f; o.connect(g); g.connect(ac.destination);
+    g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.4,t0+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.16);
+    o.start(t0); o.stop(t0+0.18); } }catch(e){}
+}
+// Vibrate where the browser allows it. iPhones ignore navigator.vibrate, but Safari gives a small
+// haptic tick when a switch-style checkbox is toggled, so fall back to toggling a hidden one.
+let hapticEl = null;
+function hapticTick(){
+  try{
+    if(!hapticEl){ hapticEl = document.createElement('label'); hapticEl.className = 'vh'; hapticEl.setAttribute('aria-hidden', 'true');
+      const i = document.createElement('input'); i.type = 'checkbox'; i.setAttribute('switch', ''); i.tabIndex = -1; hapticEl.appendChild(i); document.body.appendChild(hapticEl); }
+    hapticEl.click();
+  }catch(e){}
+}
+function canVibrate(){ return typeof navigator.vibrate === 'function'; }
+function buzz(p){
+  let ok = false; try{ ok = canVibrate() && navigator.vibrate(p); }catch(e){}
+  if(!ok){ const n = Array.isArray(p) ? Math.ceil(p.length / 2) : 1; for(let i = 0; i < n; i++) setTimeout(hapticTick, i * 220); }
+}
+async function keepAwake(){ try{ if(navigator.wakeLock && !wake){ wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release',()=>{wake=null}); } }catch(e){} }
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible' && G().phase === 'live') keepAwake(); });
+
+// ---------- actions ----------
+function go(){
+  ensureAudio(); keepAwake();
+  const g = G();
+  if(g.phase === 'live'){ g.clockBase = now(); g.runStart = null; g.phase = 'paused'; }
+  else if(g.phase === 'final') return;
+  else {
+    const fresh = g.phase === 'pre' || g.phase === 'break';
+    if(g.phase === 'break') g.quarter++;
+    g.runStart = Date.now(); g.phase = 'live';
+    if(fresh) logEv(`Q${g.quarter} started`);
+  }
+  save(); renderGame(); update();
+}
+function adj(d){
+  const g = G(), lo = (g.quarter-1)*qLen(), t = Math.min(qEnd(), Math.max(lo, now() + d));
+  g.clockBase = t; if(g.runStart) g.runStart = Date.now();
+  save(); update();
+}
+function swap(id){
+  const t = track(id), g = G(), s = g.tr[id], at = Math.min(now(), total());
+  if(halted(s) || (s.cards && s.cards[s.benchIdx])) return;
+  const {i, o} = inOut(t); if(i === o) return;
+  g.history.push({id, s:clone(s), acc:clone(g.acc[id])});
+  if(g.history.length > 40) g.history.shift();
+  g.acc[id][i] += at - s.benchSince;
+  const wait = s.called != null ? at - s.called : 0;
+  s.swaps.push({t:at, in:i, out:o, wait});
+  logEv(`${t.name}: ${slot(t, i).name} on for ${slot(t, o).name}${s.called != null ? ` (took ${fmt(wait)} after the call)` : ''}`);
+  s.benchIdx = o; s.benchSince = at; s.extra = 0; s.alert = {}; s.called = null;
+  ensureAudio(); save(); renderGame(); update();
+}
+// Calling a swap stops that line's timer until the players have actually changed.
+function callSwap(id){ const s = G().tr[id]; if(halted(s)) return; s.called = Math.min(now(), total()); ensureAudio(); save(); renderGame(); update(); }
+function cancelCall(id){ G().tr[id].called = null; save(); renderGame(); update(); }
+function undo(){
+  const g = G(), h = g.history.pop(); if(!h) return;
+  if(h.multi){ h.multi.forEach(x => { g.tr[x.id] = x.s; g.acc[x.id] = x.acc; }); g.resetAt = h.resetAt; }
+  else { g.tr[h.id] = h.s; g.acc[h.id] = h.acc; }
+  logEv(`Undid the last ${h.multi ? 'line-up reset' : (h.label || 'swap')}`);
+  save(); renderGame(); update();
+}
+// Quarter break: every line goes back to its starting line-up (player 1 on the bench), timers restart now.
+function resetLines(){
+  const g = G(), at = Math.min(now(), total());
+  g.history.push({multi: U().tracks.map(t => ({id:t.id, s:clone(g.tr[t.id]), acc:clone(g.acc[t.id])})), resetAt:g.resetAt});
+  U().tracks.forEach(t => {
+    const s = g.tr[t.id];
+    if(s.benchIdx == null) return; // a line short through injury keeps playing as it is
+    g.acc[t.id][s.benchIdx] += Math.max(0, at - s.benchSince);
+    Object.assign(s, {benchIdx:0, benchSince:at, extra:+t.offset || 0, alert:{}, called:null});
+  });
+  g.resetAt = g.quarter;
+  logEv('All lines reset to the starting line-up');
+  save(); renderGame(); update();
+}
+
+function tick(){
+  const g = G();
+  if(g.phase === 'live' && now() >= qEnd()){
+    g.clockBase = qEnd(); g.runStart = null;
+    g.phase = g.quarter >= (+U().quarters || 4) ? 'final' : 'break';
+    logEv(g.phase === 'final' ? 'Full time' : `End of Q${g.quarter}`);
+    beep(2, 520); buzz([500]); save(); renderGame();
+  }
+  // Cards run on the game clock; a player whose card is over goes straight back into the rotation.
+  const tc = now(); let back = false;
+  U().tracks.forEach(t => { const s = g.tr[t.id];
+    Object.keys(s.cards || {}).forEach(k => { const c = s.cards[k]; k = +k;
+      if(c.until == null || tc < c.until) return;
+      if(k !== s.benchIdx) g.acc[t.id][k] += c.until - c.at;
+      delete s.cards[k]; back = true;
+      logEv(`${t.name}: ${slot(t, k).name} back on after a ${c.type === 'green' ? 'green' : 'yellow'} card`);
+    }); });
+  if(back){ beep(2, 660); buzz([200,100,200]); save(); renderGame(); }
+  if(g.phase === 'live'){
+    const t0 = now();
+    U().tracks.forEach(t => {
+      const s = g.tr[t.id], rem = due(t) - t0;
+      if(s.called != null || !isFinite(rem)) return;
+      if(rem <= SOON && rem > 0 && !s.alert.soon){ s.alert.soon = 1; beep(1, 880); buzz(200); }
+      if(rem <= 0 && !s.alert.due){ s.alert.due = 1; s.alert.re = Date.now(); beep(3, 1040); buzz([300,120,300,120,300]); }
+      // Keep nagging every 15 s (up to 4 times) while a swap is overdue and not yet called.
+      else if(rem <= 0 && s.alert.due && (s.alert.n || 0) < 4 && Date.now() - (s.alert.re || 0) > 15000){ s.alert.re = Date.now(); s.alert.n = (s.alert.n || 0) + 1; beep(2, 1040); buzz([300,120,300]); }
+    });
+  }
+  update();
+}
+
+// ---------- game view ----------
+const $ = id => document.getElementById(id);
+function inkFor(hex){ const h = hex.replace('#',''); const r=parseInt(h.substr(0,2),16), gg=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16);
+  return (0.299*r + 0.587*gg + 0.114*b) > 160 ? '#111' : '#fff'; }
+const tvars = t => `--tc:${t.color};--tink:${inkFor(t.color)}`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function renderGame(){
+  const g = G(), last = g.history[g.history.length-1];
+  let banner = '';
+  if(g.phase === 'break') banner = g.resetAt === g.quarter
+    ? `<div class="banner">End of Q${g.quarter}. All lines are back to the starting line-up: number 1 of each line on the bench, timers start with Q${g.quarter+1}.</div>`
+    : `<div class="banner">End of Q${g.quarter}. Lines marked “do at break” are due in the first ${BREAK_PULL/60} min of Q${g.quarter+1}, so swap them now while play is stopped. Or start Q${g.quarter+1} from the starting line-up:
+        <div class="row" style="margin-top:10px"><button class="btn primary" data-act="resetlines">Reset to starting line-up</button></div></div>`;
+  if(g.phase === 'final') banner = `<div class="banner">Full time. ${g.practice ? 'Practice run finished.' : 'Open the Minutes tab to send the report and add this match to the season log.'}</div>`;
+  if(g.phase === 'pre') banner = `<div class="banner">Ready for push-back. Tap <b>Start</b> when the umpire starts the clock. Bench timers run on the game clock, so pausing for a stoppage pauses them too. When you give the swap command, tap <b>Call swap</b>: that line’s timer stops until you tap <b>Swap done</b>.
+      <div class="row" style="margin-top:10px"><button class="btn" data-act="practice">Practice run at 10× speed</button></div></div>`;
+  if(g.practice) banner = `<div class="banner practice">Practice run at ${g.speed}× speed. A 17:30 quarter takes under 2 minutes. Nothing here goes into the season log.
+      <div class="row" style="margin-top:10px"><button class="btn" data-act="endpractice">End practice</button></div></div>` + (g.phase === 'break' || g.phase === 'final' ? banner : '');
+  const cards = U().tracks.map(t => {
+    const s = g.tr[t.id], inj = s.injured || [], subs = s.subs || {}, crd = s.cards || {}, stop = halted(s);
+    const io = stop ? null : inOut(t), benchCard = !stop && crd[s.benchIdx];
+    const roster = t.players.map((p, k) => { const sp = slot(t, k), c = crd[k];
+      return `<span class="pl ${k===s.benchIdx?'bench':''} ${inj.includes(k)||c?'inj':''}"><span class="o">${k+1}</span>${photoOf(sp)?`<img class="av sm" src="${photoOf(sp)}" alt="">`:''}${esc(sp.name)} · ${+p.bench}′${k===s.benchIdx?' · bench':''}${inj.includes(k)?' · injured':''}${c?` · ${c.type==='red'?'red':c.type==='green'?'green':'yellow'} card`:''}</span>`; }).join('');
+    const outs = inj.map(k => `<div class="injrow">${esc(slot(t, k).name)} is injured <button class="btn-sub" data-act="back" data-id="${t.id}" data-k="${k}">Back on</button></div>`)
+      .concat(Object.keys(subs).map(k => `<div class="injrow">${esc(subs[k].name)} is in for ${esc(t.players[k].name)} <button class="btn-sub" data-act="back" data-id="${t.id}" data-k="${k}">${esc(t.players[k].name)} is back</button></div>`))
+      .concat(Object.keys(crd).map(k => { const c = crd[k];
+        return `<div class="cardrow"><span class="cchip ${c.type === 'red' ? 'red' : c.type === 'green' ? 'green' : 'yellow'}"></span>${esc(slot(t, +k).name)} ${c.until == null ? 'is sent off for the rest of the game' : `is off with a card · back in <b class="num" data-until="${c.until}">${fmt(c.until - now())}</b>`}</div>`; })).join('');
+    let mid;
+    if(stop) mid = `<p class="note">${s.benchIdx == null ? 'No one on this line’s bench, so everyone left plays on. The rotation restarts when the injured player is back, or bring in a reserve.' : 'The bench player is sent off, so the rest of this line plays on without swaps.'}</p>`;
+    else mid = `<div class="swap"><div class="in"><span class="lbl">In</span><div class="who">${av(slot(t, io.i))}<b>${esc(slot(t, io.i).name)}</b></div></div><div class="out"><span class="lbl">Out</span><div class="who">${av(slot(t, io.o))}<b>${esc(slot(t, io.o).name)}</b></div></div></div>`
+      + (benchCard ? `<p class="note">${esc(slot(t, s.benchIdx).name)} can’t come on until the card is over.</p>` : '');
+    const sub = [];
+    if(!stop && s.called == null) sub.push(`<button class="btn-sub" data-act="swap" data-id="${t.id}">Already swapped</button>`);
+    if(!stop && s.called != null) sub.push(`<button class="btn-sub" data-act="cancel" data-id="${t.id}">Cancel call</button>`);
+    sub.push(`<button class="btn-sub" data-act="injopen" data-id="${t.id}">Injury</button>`, `<button class="btn-sub" data-act="cardopen" data-id="${t.id}">Card</button>`);
+    const main = stop ? '' : s.called != null
+      ? `<button class="btn-swap" data-act="swap" data-id="${t.id}">Swap done</button>`
+      : `<button class="btn-swap" data-act="call" data-id="${t.id}" data-f="btn">Call swap</button>`;
+    return `<article class="card" data-card="${t.id}" style="${tvars(t)}">
+      <div class="card-h"><span class="chip">${esc(t.name)}</span><span class="state" data-f="state"></span><span class="breaktag" data-f="bt" hidden>Do at break</span><span class="count num" data-f="count"></span></div>
+      <div class="bar"><i data-f="bar"></i></div>
+      ${mid}
+      <div class="roster">${roster}</div>
+      ${outs}
+      ${injUI && injUI.id === t.id ? injPanel(t, s) : ''}
+      ${cardUI && cardUI.id === t.id ? cardPanel(t, s) : ''}
+      ${main}
+      <div class="subrow">${sub.join('')}</div>
+    </article>`;
+  }).join('');
+  const undoTxt = last ? (last.multi ? 'Undo line-up reset' : `Undo last ${last.label || 'swap'} (${esc(track(last.id)?.name || '')})`) : '';
+  const res = (sched().others || []).filter(o => isRealName(o.name)).map(o => o.name);
+  const names = [...new Set(res.concat(Object.values(S.squad || {}).map(x => x.name)))];
+  $('v-game').innerHTML = `<p class="schedname">Schedule: <b>${esc(sched().name)}</b></p>` + banner + (last ? `<div class="undo"><button data-act="undo">${undoTxt}</button></div>` : '')
+    + `<div class="cards">${cards}</div><datalist id="squadnames">${names.map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+}
+
+// ---------- cards ----------
+let cardUI = null; // {id, k}: the line whose card panel is open, and who got the card
+const CARD_TYPES = [['green', 'Green · 2 min', 2], ['yellow5', 'Yellow · 5 min', 5], ['yellow10', 'Yellow · 10 min', 10], ['red', 'Red · rest of game', null]];
+function cardPanel(t, s){
+  const crd = s.cards || {}, inj = s.injured || [];
+  if(cardUI.k == null){
+    const ks = t.players.map((p, k) => k).filter(k => !inj.includes(k) && !crd[k]);
+    return `<div class="inj cardp"><b>Who got the card?</b><div class="row">${ks.map(k => `<button class="btn" data-act="cardpick" data-id="${t.id}" data-k="${k}">${esc(slot(t, k).name)}</button>`).join('')}</div>
+      <div class="row"><button class="btn" data-act="cardclose">Cancel</button></div></div>`;
+  }
+  const k = cardUI.k;
+  return `<div class="inj cardp"><b>${esc(slot(t, k).name)} gets a…</b>
+    <div class="row">${CARD_TYPES.map(([id, label]) => `<button class="btn cardbtn ${id.replace(/\d+/, '')}" data-act="cardgive" data-id="${t.id}" data-k="${k}" data-type="${id}">${label}</button>`).join('')}</div>
+    <p class="note">The line plays a player short. When the time is up you’ll hear a beep and the player goes straight back into the rotation.</p>
+    <div class="row"><button class="btn" data-act="cardclose">Cancel</button></div></div>`;
+}
+function giveCard(id, k, type){
+  const g = G(), s = g.tr[id], t = track(id), at = Math.min(now(), total());
+  const def = CARD_TYPES.find(c => c[0] === type); if(!def) return;
+  g.history.push({id, s:clone(s), acc:clone(g.acc[id]), label:'card'});
+  s.cards = s.cards || {}; s.cardLog = s.cardLog || [];
+  s.cards[k] = {type: type.replace(/\d+/, ''), at, until: def[2] == null ? null : at + def[2] * 60};
+  s.cardLog.push({k, at, type:def[1], name:slot(t, k).name});
+  if(s.called != null && inOut(t).o === k) s.called = null;
+  logEv(`${t.name}: ${slot(t, k).name} ${def[2] == null ? 'red card' : def[1].toLowerCase().replace(' · ', ' card, ')}`);
+  cardUI = null; save(); renderGame(); update();
+}
+
+// ---------- injuries ----------
+let injUI = null; // {id, k}: the line whose injury panel is open, and who is hurt
+function injPanel(t, s){
+  if(injUI.k == null){
+    const ks = t.players.map((p, k) => k).filter(k => !(s.injured || []).includes(k));
+    return `<div class="inj"><b>Who is injured?</b><div class="row">${ks.map(k => `<button class="btn" data-act="injpick" data-id="${t.id}" data-k="${k}">${esc(slot(t, k).name)}</button>`).join('')}</div>
+      <div class="row"><button class="btn" data-act="injclose">Cancel</button></div></div>`;
+  }
+  const k = injUI.k, nm = esc(slot(t, k).name);
+  const benchOpt = s.benchIdx === k ? 'Line plays on without a bench'
+    : s.benchIdx != null ? `${esc(slot(t, s.benchIdx).name)} comes on now` : 'Mark injured (no one on the bench)';
+  return `<div class="inj"><b>${nm} is injured. How do you cover?</b>
+    <div class="row"><button class="btn primary" data-act="injbench" data-id="${t.id}" data-k="${k}">${benchOpt}</button></div>
+    <div class="row"><input type="text" id="res-${t.id}" list="squadnames" placeholder="Reserve’s name" aria-label="Reserve’s name" style="flex:1 1 140px;width:auto">
+      <button class="btn" data-act="injres" data-id="${t.id}" data-k="${k}">Reserve takes ${nm}’s spot</button></div>
+    <div class="row"><button class="btn" data-act="injclose">Cancel</button></div></div>`;
+}
+function injure(id, k, mode, resName){
+  const g = G(), s = g.tr[id], t = track(id), at = Math.min(now(), total());
+  g.history.push({id, s:clone(s), acc:clone(g.acc[id]), label:'injury'});
+  s.subs = s.subs || {}; s.injured = s.injured || []; s.injAt = s.injAt || {};
+  const hurt = slot(t, k).name;
+  s.injLog = s.injLog || []; s.injLog.push({k, at, name:hurt});
+  if(mode === 'reserve'){
+    // The reserve steps into the injured player's spot; the rotation carries on unchanged.
+    const nm = String(resName || '').trim() || 'Reserve', hit = squadByName(nm);
+    s.subs[k] = {name: hit ? S.squad[hit].name : nm, photo: hit ? S.squad[hit].photo : '', pid: hit || null};
+    logEv(`${t.name}: ${hurt} injured, reserve ${s.subs[k].name} takes the spot`);
+  } else {
+    if(s.benchIdx === k){ g.acc[id][k] += at - s.benchSince; }
+    else if(s.benchIdx != null){ const b = s.benchIdx; g.acc[id][b] += at - s.benchSince; s.swaps.push({t:at, in:b, out:k, wait:0, injury:true});
+      logEv(`${t.name}: ${hurt} injured, ${slot(t, b).name} comes on`); }
+    if(s.benchIdx === k || s.benchIdx == null) logEv(`${t.name}: ${hurt} injured`);
+    s.benchIdx = null; s.called = null; s.injured.push(k); s.injAt[k] = at;
+  }
+  injUI = null; save(); renderGame(); update();
+}
+function backOn(id, k){
+  const g = G(), s = g.tr[id], at = Math.min(now(), total());
+  g.history.push({id, s:clone(s), acc:clone(g.acc[id]), label:'return'});
+  const t = track(id);
+  if(s.subs && s.subs[k]){ logEv(`${t.name}: ${t.players[k].name} back, takes the spot from ${s.subs[k].name}`); delete s.subs[k]; }
+  else if(s.injured && s.injured.includes(k)){
+    logEv(`${t.name}: ${slot(t, k).name} back from injury`);
+    s.injTot = s.injTot || {}; s.injTot[k] = (s.injTot[k] || 0) + at - s.injAt[k];
+    g.acc[id][k] += at - s.injAt[k]; delete s.injAt[k];
+    s.injured = s.injured.filter(x => x !== k);
+    // Once the line is complete again, the returning player sits first and the rotation restarts.
+    if(s.benchIdx == null && !s.injured.length){ s.benchIdx = k; s.benchSince = at; s.extra = 0; s.alert = {}; }
+  }
+  save(); renderGame(); update();
+}
+
+function update(){
+  const g = G(), t0 = now();
+  $('clock').textContent = fmt(t0 - (g.quarter-1)*qLen());
+  $('qlabel').textContent = (g.practice ? `Practice ${g.speed}× · ` : '') + (g.phase === 'final' ? 'Full time' : g.phase === 'break' ? `End of Q${g.quarter}` : `Q${g.quarter} · ${fmt(t0)} total`);
+  document.querySelectorAll('[data-until]').forEach(el => { el.textContent = fmt(+el.dataset.until - t0); });
+  const gb = $('go');
+  gb.textContent = g.phase === 'live' ? 'Pause' : g.phase === 'break' ? `Start Q${g.quarter+1}` : g.phase === 'paused' ? 'Resume' : g.phase === 'final' ? 'Done' : 'Start';
+  gb.classList.toggle('pause', g.phase === 'live');
+  const mg = $('mgo'); mg.textContent = gb.textContent; mg.classList.toggle('pause', g.phase === 'live');
+  $('mclock').textContent = $('clock').textContent; $('mq').textContent = g.phase === 'break' || g.phase === 'final' ? $('qlabel').textContent : `Q${g.quarter}`;
+
+  const stopped = U().tracks.filter(t => halted(g.tr[t.id]));
+  const waiting = U().tracks.filter(t => g.tr[t.id].called != null && !halted(g.tr[t.id]));
+  const list = U().tracks.filter(t => g.tr[t.id].called == null && !halted(g.tr[t.id])).map(t => ({t, rem: due(t) - t0})).sort((a,b) => a.rem - b.rem);
+  const wtxt = waiting.length ? `<span class="clash" style="color:var(--accent)">Waiting: ${waiting.map(t => esc(t.name) + ' ' + fmt(t0 - g.tr[t.id].called)).join(', ')}</span> · ` : '';
+  if(!list.length) $('next').innerHTML = wtxt;
+  if(list.length){
+    const a = list[0], b = list[1], io = inOut(a.t);
+    let h = wtxt + `Next: <b>${esc(a.t.name)}</b> ${a.rem>0?'in '+fmt(a.rem):'now'} · ${esc(slot(a.t, io.i).name)} for ${esc(slot(a.t, io.o).name)}`;
+    if(b && b.rem - a.rem < CLASH) h += ` <span class="clash">+ ${esc(b.t.name)} ${b.rem>0?fmt(b.rem):'now'}: close together, do one early</span>`;
+    else if(b) h += ` · then ${esc(b.t.name)} ${fmt(b.rem)}`;
+    $('next').innerHTML = h;
+    $('mnext').textContent = `${a.t.name} ${a.rem > 0 ? fmt(a.rem) : 'now'}`;
+  }
+
+  if(S.view === 'game'){
+    // Lines that were called sit on top, then the rest by how soon they swap.
+    waiting.concat(list.map(x => x.t), stopped).forEach((t, k) => { const c = document.querySelector(`[data-card="${t.id}"]`); if(c) c.style.order = k; });
+    U().tracks.forEach(t => {
+      const card = document.querySelector(`[data-card="${t.id}"]`); if(!card) return;
+      const s = g.tr[t.id], d = due(t), rem = d - t0;
+      if(halted(s)){
+        card.classList.remove('soon', 'due', 'called');
+        card.querySelector('[data-f="state"]').textContent = 'Playing through';
+        card.querySelector('[data-f="count"]').textContent = '–';
+        card.querySelector('[data-f="bar"]').style.width = '0';
+        card.querySelector('[data-f="bt"]').hidden = true;
+        return;
+      }
+      const called = s.called != null;
+      const soon = !called && rem <= SOON && rem > 0, isDue = !called && rem <= 0;
+      card.classList.toggle('soon', soon); card.classList.toggle('due', isDue); card.classList.toggle('called', called);
+      const f = n => card.querySelector(`[data-f="${n}"]`);
+      const span = Math.max(1, d - s.benchSince);
+      f('bar').style.width = Math.min(100, Math.max(0, ((called ? s.called : t0) - s.benchSince) / span * 100)) + '%';
+      if(called){
+        f('state').textContent = 'Called · waiting';
+        f('count').textContent = fmt(t0 - s.called);
+        f('bt').hidden = true;
+        return;
+      }
+      const carded = s.cards && s.cards[s.benchIdx];
+      f('state').textContent = carded && !isDue ? 'Bench player carded' : isDue ? (rem < -15 ? 'Overdue' : 'Swap now') : soon ? 'Get ready' : 'Next swap in';
+      f('count').textContent = isDue ? '+' + fmt(-rem) : fmt(rem);
+      f('bt').hidden = !(g.phase === 'break' && rem <= BREAK_PULL);
+      const btn = f('btn'); if(btn){ btn.textContent = carded ? 'Waiting for card' : isDue || (g.phase === 'break' && rem <= BREAK_PULL) ? 'Call swap' : 'Call early'; btn.disabled = !!carded; }
+    });
+  }
+  if(S.view === 'minutes' && (Date.now() % 1000) < 260) refreshMinutes();
+}
+
+// ---------- plan ----------
+function simulate(setup, offsets){
+  const T = Math.max(1, +setup.quarterMin || 17.5) * 60 * Math.max(1, +setup.quarters || 4);
+  return setup.tracks.map((t, k) => {
+    const out = []; let idx = 0, from = 0, extra = offsets ? offsets[k] : (+t.offset || 0);
+    while(out.length < 400){ const d = from + benchMin(t.players[idx]) * 60 + extra; if(d >= T) break; out.push(d); from = d; extra = 0; idx = (idx + 1) % t.players.length; }
+    return out;
+  });
+}
+function clashInfo(times){
+  const all = []; times.forEach((arr, k) => arr.forEach(x => all.push({x, k}))); all.sort((a,b) => a.x - b.x);
+  let n = 0, minGap = Infinity; const bad = new Set();
+  for(let j=1;j<all.length;j++){ if(all[j].k === all[j-1].k) continue; const gp = all[j].x - all[j-1].x;
+    minGap = Math.min(minGap, gp); if(gp < CLASH){ n++; bad.add(all[j].k+':'+all[j].x); bad.add(all[j-1].k+':'+all[j-1].x); } }
+  return {n, minGap, bad, count: all.length};
+}
+function autoStagger(){
+  const tr = U().tracks, steps = tr.length > 5 ? [0,30,60,90] : [0,15,30,45,60,75,90];
+  let best = null; const cur = new Array(tr.length).fill(0);
+  (function rec(k){
+    if(k === tr.length){ const c = clashInfo(simulate(U(), cur)); const sum = cur.reduce((a,b)=>a+b,0);
+      const score = [c.n, -Math.min(c.minGap, 60), sum];
+      if(!best || score[0]<best.s[0] || (score[0]===best.s[0] && (score[1]<best.s[1] || (score[1]===best.s[1] && score[2]<best.s[2])))) best = {s:score, o:cur.slice()};
+      return; }
+    for(const v of steps){ cur[k] = v; rec(k+1); }
+  })(0);
+  tr.forEach((t, k) => t.offset = best.o[k]);
+  if(G().phase === 'pre') S.game = newGame(U());
+  save(); renderPlan(); renderGame(); update();
+}
+function renderPlan(){
+  const times = simulate(U()), c = clashInfo(times), T = total(), tr = U().tracks;
+  const L = 86, R = 990, top = 26, lane = 38, H = top + lane * tr.length + 8;
+  const X = s => L + (R - L) * s / T;
+  let svg = `<svg viewBox="0 0 1000 ${H}" role="img" aria-label="Planned swaps per line across the match">`;
+  for(let q=0;q<=(+U().quarters||4);q++){ const x = X(q*qLen());
+    svg += `<line x1="${x}" x2="${x}" y1="18" y2="${H-4}" stroke="var(--line)" stroke-width="2" ${q>0&&q<(+U().quarters||4)?'stroke-dasharray="4 4"':''}/>`;
+    if(q < (+U().quarters||4)) svg += `<text x="${X(q*qLen()+qLen()/2)}" y="14" text-anchor="middle">Q${q+1}</text>`; }
+  tr.forEach((t, k) => { const y = top + k*lane;
+    svg += `<text class="tn" x="0" y="${y+lane/2+4}">${esc(t.name)}</text>`;
+    svg += `<line x1="${L}" x2="${R}" y1="${y+lane/2}" y2="${y+lane/2}" stroke="var(--line)" stroke-width="1"/>`;
+    times[k].forEach(x => { const px = X(x), bad = c.bad.has(k+':'+x);
+      svg += `<rect x="${px-2}" y="${y+7}" width="4" height="${lane-14}" rx="1" fill="${t.color}"/>`;
+      if(bad) svg += `<circle cx="${px}" cy="${y+lane/2}" r="9" fill="none" stroke="var(--due)" stroke-width="2"/>`; });
+  });
+  svg += `</svg>`;
+  $('v-plan').innerHTML = `
+    <h2>Swap plan</h2>
+    <p class="lead">Every planned swap across the match if each one happens on time. Red rings mark two lines swapping within ${CLASH} seconds of each other, which you can’t do alone. Auto-stagger delays the first swap of some lines by up to 90 seconds so the swaps spread out.</p>
+    <div class="stats">
+      <div class="stat"><span class="lbl">Swaps</span><b class="num">${c.count}</b></div>
+      <div class="stat ${c.n?'bad':'good'}"><span class="lbl">Clashes</span><b class="num">${c.n}</b></div>
+      <div class="stat"><span class="lbl">Closest gap</span><b class="num">${isFinite(c.minGap)?fmt(c.minGap):'–'}</b></div>
+    </div>
+    <div class="planbox">${svg}</div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn primary" data-act="stagger" ${G().phase!=='pre'?'disabled':''}>Auto-stagger first swaps</button>
+      <span class="note">${tr.map(t => `${esc(t.name)} +${+t.offset||0}s`).join(' · ')}</span>
+    </div>
+    ${G().phase!=='pre'?'<p class="note">Stagger is set before the game. During play, the Game tab warns you when two swaps come close.</p>':''}`;
+}
+
+// ---------- minutes, report and season log ----------
+const mins = s => Math.round(s / 6) / 10; // seconds → minutes with one decimal
+// One row per person who played in this match, counted on the game clock.
+function matchRows(){
+  const g = G(), t0 = Math.min(now(), total()), rows = [];
+  U().tracks.forEach(t => {
+    const s = g.tr[t.id];
+    t.players.forEach((p, k) => {
+      const injNow = (s.injured || []).includes(k), c = (s.cards || {})[k];
+      const cardOff = c && k !== s.benchIdx ? Math.max(0, Math.min(t0, c.until == null ? t0 : c.until) - c.at) : 0;
+      const benched = g.acc[t.id][k] + (k === s.benchIdx && !injNow ? Math.max(0, t0 - s.benchSince) : 0) + (injNow ? Math.max(0, t0 - s.injAt[k]) : 0) + cardOff;
+      const sp = slot(t, k), injured = ((s.injTot || {})[k] || 0) + (injNow ? Math.max(0, t0 - s.injAt[k]) : 0);
+      rows.push({line:t.name, color:t.color, pid: sp.sub ? (sp.pid || squadByName(sp.name) || null) : (p.pid || null), name:sp.name,
+        status: injNow ? 'Injured' : c ? 'Card' : k === s.benchIdx ? 'Bench' : 'Field',
+        played: Math.max(0, t0 - benched), bench: benched, ins: s.swaps.filter(w => w.in === k).length,
+        injured, cards: (s.cardLog || []).filter(x => x.k === k).map(x => x.type.split(' ·')[0])});
+    });
+  });
+  (sched().others || []).filter(o => o.why === 'Full game').forEach(o => rows.push({line:'Full game', color:'#5BC8E8', pid:o.pid || null, name:o.name || 'Full-game player',
+    status:'Field', played:t0, bench:0, ins:0, injured:0, cards:[]}));
+  return rows;
+}
+function reportText(){
+  const g = G(), rows = matchRows(), t0 = Math.min(now(), total());
+  const head = `${sched().name} · ${new Date().toLocaleDateString()} · ${g.phase === 'final' ? 'full time' : 'at ' + qtime(t0)}`;
+  const lines = [...new Set(rows.map(r => r.line))].map(l => `${l.toUpperCase()}\n` + rows.filter(r => r.line === l)
+    .map(r => `  ${r.name}: ${fmt(r.played)} played${r.ins ? `, on ${r.ins}×` : ''}${r.injured ? `, injured ${fmt(r.injured)}` : ''}${r.cards.length ? `, ${r.cards.join(' + ')} card` : ''}`).join('\n'));
+  const waits = U().tracks.flatMap(t => g.tr[t.id].swaps.filter(w => w.wait > 0).map(w => w.wait));
+  const avgWait = waits.length ? ` Average time from call to swap: ${fmt(waits.reduce((a, b) => a + b, 0) / waits.length)}.` : '';
+  return `${head}\n\n${lines.join('\n\n')}\n\n${U().tracks.reduce((a, t) => a + g.tr[t.id].swaps.length, 0)} swaps.${avgWait}`;
+}
+function reportCsv(){
+  const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  return ['Line,Player,Played (min),Bench (min),Times on,Injured (min),Cards']
+    .concat(matchRows().map(r => [r.line, r.name, mins(r.played), mins(r.bench), r.ins, mins(r.injured), r.cards.join(' + ')].map(q).join(','))).join('\n');
+}
+function saveMatch(){
+  const g = G(); if(g.practice) return;
+  const id = g.matchId || ('m' + Date.now());
+  const m = {id, name:sched().name, date:new Date().toISOString().slice(0, 10),
+    rows: matchRows().map(r => ({pid:r.pid, name:r.name, line:r.line, played:Math.round(r.played), bench:Math.round(r.bench), ins:r.ins, injured:Math.round(r.injured), cards:r.cards})),
+    log: (g.log || []).slice(-300)};
+  g.matchId = id;
+  const i = S.matches.findIndex(x => x.id === id); if(i >= 0) S.matches[i] = m; else S.matches.push(m);
+  save(); renderMinutes();
+}
+function seasonRows(){
+  const by = {};
+  S.matches.forEach(m => m.rows.forEach(r => {
+    const key = r.pid && (S.squad[r.pid] || !r.name) ? r.pid : 'n:' + String(r.name).toLowerCase();
+    const e = by[key] = by[key] || {name: (r.pid && S.squad[r.pid] && S.squad[r.pid].name) || r.name, n:0, total:0, last:[], injured:0, cards:0};
+    e.n++; e.total += r.played; e.last.push(r.played); e.injured += r.injured || 0; e.cards += (r.cards || []).length;
+  }));
+  return Object.values(by).sort((a, b) => b.total - a.total);
+}
+function logHtml(){
+  const log = (G().log || []).slice().reverse();
+  return log.length ? `<ol class="log">${log.map(e => `<li><span class="num">${qtime(e.t)}</span>${esc(e.text)}</li>`).join('')}</ol>` : '<p class="note">Swaps, calls, injuries and cards appear here as they happen.</p>';
+}
+function minutesBody(){
+  return matchRows().map(r => `<tr style="--tc:${r.color}"><td><span class="sw"></span>${esc(r.name)}</td><td>${r.status}</td><td class="r num">${fmt(r.played)}</td><td class="r num">${fmt(r.bench)}</td><td class="r num">${r.ins}</td></tr>`).join('');
+}
+function refreshMinutes(){ const b = $('mbody'); if(b) b.innerHTML = minutesBody(); const l = $('mlog'); if(l) l.innerHTML = logHtml(); }
+let reportMsg = '';
+function renderMinutes(){
+  const g = G(), saved = g.matchId && S.matches.some(x => x.id === g.matchId), season = seasonRows();
+  $('v-minutes').innerHTML = `<h2>Playing time</h2><p class="lead">Counted on the game clock from the swaps you confirmed. Time out injured or with a card doesn’t count as playing time.</p>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Player</th><th>Now</th><th class="r">Played</th><th class="r">Bench</th><th class="r">Times on</th></tr></thead><tbody id="mbody">${minutesBody()}</tbody></table></div>
+    <h2>Match report</h2>
+    <p class="lead">Send it to the coach or S&amp;C staff, then add the match to the season log so you can follow each player’s load week to week.</p>
+    <div class="row">
+      <button class="btn primary" data-act="copyreport">Copy report</button>
+      ${dl || OFFLINE ? '<button class="btn" data-act="csv">Save as spreadsheet (CSV)</button>' : ''}
+      ${g.practice ? '<span class="note">Practice runs aren’t added to the season log.</span>'
+        : `<button class="btn" data-act="savematch">${saved ? 'Update in season log' : 'Add to season log'}</button>`}
+    </div>
+    <p class="note" id="reportmsg" aria-live="polite">${esc(reportMsg)}</p>
+    <textarea id="reporttext" class="reportbox" readonly hidden></textarea>
+    <h2>Match log</h2>
+    <div id="mlog">${logHtml()}</div>
+    <h2>Season log</h2>
+    ${S.matches.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Player</th><th class="r">Matches</th><th class="r">Total</th><th class="r">Average</th><th class="r">Last match</th><th class="r">Injured</th></tr></thead><tbody>
+      ${season.map(e => `<tr><td>${esc(e.name)}</td><td class="r num">${e.n}</td><td class="r num">${fmt(e.total)}</td><td class="r num">${fmt(e.total / e.n)}</td><td class="r num">${fmt(e.last[e.last.length - 1])}</td><td class="r num">${e.injured ? fmt(e.injured) : '–'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="matches">${S.matches.slice().reverse().map(m => `<div class="match"><span><b>${esc(m.name)}</b> · ${esc(m.date)}</span><button class="btn-sub" data-act="delmatch" data-mid="${m.id}">Remove</button></div>`).join('')}</div>`
+      : '<p class="note">No matches yet. At full time, tap “Add to season log”.</p>'}`;
+}
+
+// ---------- setup ----------
+function renderSetup(){
+  const locked = G().phase !== 'pre', u = U();
+  $('v-setup').innerHTML = `
+    <h2>Schedules</h2>
+    <p class="lead">Keep one schedule per match. To set up this week, duplicate last week’s and change what’s different.</p>
+    <div class="row">
+      <div class="field" style="flex:1 1 180px"><label for="s-pick">Schedule in use</label><select id="s-pick" ${locked?'disabled':''}>${S.schedules.map(x => `<option value="${x.id}" ${x.id===sched().id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
+      <div class="field" style="flex:1 1 180px"><label for="s-name">Name</label><input type="text" id="s-name" value="${esc(sched().name)}"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" data-act="sdup" ${locked?'disabled':''}>Duplicate</button>
+      <button class="btn" data-act="snew" ${locked?'disabled':''}>New blank</button>
+      <button class="btn danger" data-act="sdel" ${locked||S.schedules.length<=1?'disabled':''}>Delete</button>
+    </div>
+    <div class="import needs-claude">
+      <b>New schedule from a board photo</b>
+      <span class="note">Upload a photo or screenshot of the swap board. Claude reads each frame colour, bench minutes (big number) and swap order (small number), and the app cuts out every player’s photo.</span>
+      <div class="row"><button class="btn primary" data-act="pickboard" ${readCtl?'disabled':''}>${readCtl?'Reading…':'Upload board photo'}</button><input type="file" id="board-file" accept="image/*" class="vh" tabindex="-1" aria-hidden="true">
+        <button class="btn" data-act="stopread" ${readCtl?'':'hidden'}>Stop</button></div>
+      ${locked?'<span class="note">A game is running, so the new schedule will be saved but not switched on until you reset the game.</span>':''}
+      <span class="note" id="readstatus" aria-live="polite">${esc(readMsg)}</span>
+    </div>
+    ${locked?'<p class="note">A game is running. Reset the game (at the bottom) to switch schedules.</p>':''}
+    <h2>Lines and bench times</h2>
+    <p class="lead">One card per colour line. List players in swap order (the small number): number 1 starts on the bench and comes on for number 2, then 2 comes on for 3, and so on around the loop. Bench minutes is the big number. Players who play the whole game, like the keeper, don’t need a line.</p>
+    <div class="row">
+      <div class="field" style="width:130px"><label for="s-q">Quarter (min)</label><input type="number" id="s-q" min="1" step="0.5" value="${u.quarterMin}"></div>
+      <div class="field" style="width:110px"><label for="s-n">Quarters</label><input type="number" id="s-n" min="1" max="4" value="${u.quarters}" ${locked?'disabled':''}></div>
+    </div>
+    ${u.tracks.map(t => `<div class="tset" style="${tvars(t)}">
+      <div class="trow">
+        <div class="field"><label for="t-${t.id}-name">Line name</label><input type="text" id="t-${t.id}-name" value="${esc(t.name)}"></div>
+        <div class="field"><label for="t-${t.id}-color">Colour</label><input type="color" id="t-${t.id}-color" value="${t.color}"></div>
+        <div class="field"><label for="t-${t.id}-off">First swap delay (s)</label><input type="number" id="t-${t.id}-off" min="0" step="5" value="${+t.offset||0}" ${locked?'disabled':''}></div>
+      </div>
+      <div class="hdr"><span>#</span><span></span><span>Player</span><span>Bench</span><span></span><span></span></div>
+      ${t.players.map((p, k) => `<div class="prow">
+        <span class="o">${k+1}</span>
+        <button class="avbtn" data-act="pickph" data-for="ph-${t.id}-${k}" aria-label="Change photo of player ${k+1}">${av(p)}</button><input type="file" id="ph-${t.id}-${k}" accept="image/*" class="vh" tabindex="-1" aria-hidden="true">
+        <input type="text" id="p-${t.id}-${k}-name" value="${esc(p.name)}" aria-label="Player ${k+1} name">
+        <input type="number" id="p-${t.id}-${k}-bench" min="0.25" step="0.5" value="${p.bench}" aria-label="Player ${k+1} bench minutes">
+        <button data-act="up" data-id="${t.id}" data-k="${k}" ${locked||k===0?'disabled':''} aria-label="Move player ${k+1} earlier in the order">↑</button>
+        <button data-act="delp" data-id="${t.id}" data-k="${k}" ${locked||t.players.length<=2?'disabled':''} aria-label="Remove player ${k+1}">×</button>
+      </div>`).join('')}
+      <div class="row"><button class="btn" data-act="addp" data-id="${t.id}" ${locked?'disabled':''}>Add player</button>
+        <button class="btn danger" data-act="delt" data-id="${t.id}" ${locked||u.tracks.length<=1?'disabled':''}>Remove line</button></div>
+    </div>`).join('')}
+    <div class="row" style="margin-top:12px">
+      <button class="btn" data-act="addt" ${locked?'disabled':''}>Add line</button>
+      <button class="btn danger" data-act="reset" id="resetbtn">Reset game</button>
+      <button class="btn" data-act="defaults" ${locked?'disabled':''}>Load example board</button>
+    </div>
+    ${locked?'<p class="note">The game has started, so you can rename players and change bench minutes, but adding or removing players needs a reset.</p>':''}
+    <h2>Other players on this board</h2>
+    <p class="lead">Keepers and full-game players, reserves, and anyone not playing. Name them here so they join the squad and are recognised on the next board. Reserves show up as options when you cover an injury.</p>
+    <div class="others">${(sched().others || []).map((o, i) => `<div class="prow orow">
+        <button class="avbtn" data-act="pickph" data-for="oph-${i}" aria-label="Change photo">${av(o)}</button><input type="file" id="oph-${i}" accept="image/*" class="vh" tabindex="-1" aria-hidden="true">
+        <input type="text" id="o-${i}-name" value="${esc(o.name || '')}" placeholder="Name" aria-label="Name">
+        <select id="o-${i}-why" aria-label="Role">${['Full game','Reserve','Not playing'].map(w => `<option ${o.why === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
+        <button data-act="delo" data-i="${i}" aria-label="Remove">×</button></div>`).join('') || '<p class="note">None yet. Uploading a board adds them automatically.</p>'}</div>
+    <div class="row" style="margin-top:8px"><button class="btn" data-act="addo">Add a player</button></div>
+    <h2>Match day</h2>
+    <p class="lead">Your phone buzzes and beeps 30 seconds before each swap, again when it’s due, and every 15 seconds while it’s overdue. Keep this page open with the volume up. The screen stays on while the clock runs.</p>
+    <div class="row"><button class="btn primary" data-act="testbuzz">Test the buzz</button><span class="note" id="buzzmsg" aria-live="polite"></span></div>
+    <label class="check"><input type="checkbox" id="set-confirm" ${S.settings.confirm ? 'checked' : ''}> Ask for a second tap before “Swap done” and “Already swapped” count, so a bump in your pocket can’t log a swap</label>
+    ${OFFLINE ? '' : `<h2>Backup and sharing</h2>
+    <p class="lead" id="syncinfo">${syncInfo()}</p>`}
+    ${OFFLINE ? `<h2>Claude features</h2>
+    <p class="lead">With internet, this app can read board photos and team screenshots and recognise faces, using your own Claude API key (from console.anthropic.com; each photo costs a few cents). The key stays on this phone and is never included in exports. Without a key or without internet, everything else still works.</p>
+    <div class="row"><div class="field" style="flex:1 1 220px"><label for="api-key">Claude API key</label><input type="password" id="api-key" autocomplete="off" placeholder="${getKey() ? 'Saved on this phone' : 'Paste your key'}"></div></div>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="savekey">Save key</button>${getKey() ? '<button class="btn danger" data-act="delkey">Remove key</button>' : ''}</div>
+    <p class="note" id="keymsg" aria-live="polite">${getKey() ? 'Claude features are on when you have internet.' : 'Claude features are off.'}</p>` : ''}
+    <h2>${OFFLINE ? 'Bring in this week’s schedule' : 'Offline app'}</h2>
+    <p class="lead">${OFFLINE
+      ? 'Set up the board in the Claude version (photo reading and face recognition work there), tap Export there, then Import the file here. Export from here takes your season log back to the Claude version.'
+      : 'For match days without signal: tap Export, then Import the file in the offline app. It brings over your schedules, squad and photos. Import a file from the offline app here to bring its season log back.'}</p>
+    <div class="row"><button class="btn primary" data-act="${OFFLINE ? 'pickimport' : 'exportdata'}">${OFFLINE ? 'Import' : 'Export for offline app'}</button>
+      <button class="btn" data-act="${OFFLINE ? 'exportdata' : 'pickimport'}">${OFFLINE ? 'Export season log' : 'Import from offline app'}</button>
+      <input type="file" id="import-file" accept=".json,application/json" class="vh" tabindex="-1" aria-hidden="true"></div>
+    <p class="note" id="movemsg" aria-live="polite">${esc(moveMsg)}</p>
+    <h2>Squad</h2>
+    <p class="lead">Every player you’ve named, with their photo. A name follows its face into every schedule, and when you upload a new board Claude matches faces against this list and fills the names in.</p>
+    <div class="import needs-claude">
+      <b>Clean photos without numbers</b>
+      <span class="note">Board pictures have the minutes printed over the faces. Upload screenshots of a team page (photos with names under them, like the league app) or the original headshots, and each photo replaces that player’s picture everywhere. Tap a face below to change a single photo.</span>
+      <div class="row"><button class="btn primary" data-act="pickteam">Upload team page screenshots</button><input type="file" id="team-files" accept="image/*" multiple class="vh" tabindex="-1" aria-hidden="true"><button class="btn" data-act="pickclean">Upload single headshots</button><input type="file" id="clean-files" accept="image/*" multiple class="vh" tabindex="-1" aria-hidden="true"></div>
+      <span class="note" id="cleanmsg" aria-live="polite">${esc(cleanMsg)}</span>
+      ${cleanPending.length ? `<div class="others">${cleanPending.map((c, i) => `<div class="prow orow">${av(c)}<span class="note">Who is this?</span><select id="cp-${i}" aria-label="Who is this?"><option value="">Choose…</option>${Object.keys(S.squad).sort((a, b) => S.squad[a].name.localeCompare(S.squad[b].name)).map(k => `<option value="${k}">${esc(S.squad[k].name)}</option>`).join('')}</select><button data-act="cpskip" data-i="${i}" aria-label="Skip this photo">×</button></div>`).join('')}</div>` : ''}
+    </div>
+    <div id="squadlist"></div>`;
+  renderSquad();
+}
+document.addEventListener('input', e => {
+  const id = e.target.id, v = e.target.value, u = U(); let m;
+  if(m = id.match(/^cp-(\d+)$/)){ const it = cleanPending[+m[1]]; if(it && v && S.squad[v]){ setSquadPhoto(v, it.photo, it.sig); cleanPending.splice(+m[1], 1); cleanMsg = `Photo set for ${S.squad[v].name}.`; save(); renderSetup(); renderGame(); update(); } return; }
+  if(id === 'set-confirm'){ S.settings.confirm = e.target.checked; save(); return; }
+  if(m = id.match(/^o-(\d+)-why$/)){ const o = (sched().others || [])[+m[1]]; if(o){ o.why = v; save(); } return; }
+  if(id === 's-pick'){ S.activeId = v; S.game = newGame(U()); save(); show(); return; }
+  if(id === 's-name'){ sched().name = v; const o = document.querySelector(`#s-pick option[value="${sched().id}"]`); if(o) o.textContent = v; }
+  else if(id === 's-q'){ u.quarterMin = Math.max(1, +v || 17.5); }
+  else if(id === 's-n'){ u.quarters = Math.min(4, Math.max(1, +v || 4)); }
+  else if(m = id.match(/^t-(.+)-(name|color|off)$/)){ const t = track(m[1]); if(!t) return;
+    if(m[2]==='name') t.name = v; if(m[2]==='color'){ t.color = v; e.target.closest('.tset').setAttribute('style', tvars(t)); }
+    if(m[2]==='off'){ t.offset = Math.max(0, +v || 0); if(G().phase==='pre') G().tr[t.id].extra = t.offset; } }
+  else if(m = id.match(/^p-(.+)-(\d+)-(name|bench)$/)){ const t = track(m[1]); if(!t) return; const p = t.players[+m[2]];
+    if(m[3]==='name') p.name = v; else p.bench = +v || p.bench; }
+  else return;
+  save(); renderGame(); update();
+});
+
+// ---------- photos and board reading ----------
+function initials(n){ return String(n || '?').split(/\s+/).map(w => w[0] || '').join('').slice(0,2).toUpperCase(); }
+function av(p){ return photoOf(p) ? `<img class="av" src="${photoOf(p)}" alt="">` : `<span class="av ph">${esc(initials(p.name))}</span>`; }
+function loadImg(file){ return new Promise((res, rej) => { const img = new Image(), url = URL.createObjectURL(file);
+  img.onload = () => res(img); img.onerror = () => rej(new Error('image')); img.src = url; }); }
+function squareFrom(src, sx, sy, side){ const o = document.createElement('canvas'); o.width = o.height = 128;
+  o.getContext('2d').drawImage(src, sx, sy, side, side, 0, 0, 128, 128); return o.toDataURL('image/jpeg', 0.82); }
+function cropBox(cv, box){
+  if(!Array.isArray(box) || box.length < 4) return '';
+  const [x, y, w, h] = box.map(Number), W = cv.width, H = cv.height;
+  const cx = (x + w/2) / 1000 * W, cy = (y + h/2) / 1000 * H, side = Math.min(w / 1000 * W, h / 1000 * H) * 0.86;
+  return side > 4 ? squareFrom(cv, cx - side/2, cy - side/2, side) : '';
+}
+
+// ---------- face matching that ignores the printed numbers ----------
+// Boards reuse the same headshots week to week; only the faded minutes digit (or an X) printed over
+// them changes. So compare small grey thumbnails and score with the median pixel difference: the
+// part a digit covers is outvoted by the rest of the photo. Small shifts and scales absorb crop wobble.
+const SIG = 32, PAD = 4, CW = SIG + 2 * PAD, PHOTO_FR = 0.86;
+function greyGrid(px, W, H, sx, sy, side, n){
+  const out = new Float32Array(n * n), step = side / n;
+  for(let gy = 0; gy < n; gy++) for(let gx = 0; gx < n; gx++){
+    let sum = 0, cnt = 0;
+    for(let yy = 0; yy < 3; yy++) for(let xx = 0; xx < 3; xx++){
+      const x = Math.floor(sx + (gx + (xx + 0.5) / 3) * step), y = Math.floor(sy + (gy + (yy + 0.5) / 3) * step);
+      if(x < 0 || y < 0 || x >= W || y >= H) continue;
+      const i = (y * W + x) * 4; sum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; cnt++;
+    }
+    out[gy * n + gx] = cnt ? sum / cnt : 128;
+  }
+  return out;
+}
+function centred(a){ let m = 0; for(const v of a) m += v; m /= a.length; return a.map(v => v - m); }
+// A reference: the photo area of one tile, as a 32×32 grey grid with its mean removed, packed to text.
+function refSig(px, W, H, cx, cy, boxSide){
+  const side = boxSide * PHOTO_FR, g = centred(greyGrid(px, W, H, cx - side / 2, cy - side / 2, side, SIG));
+  let s = ''; for(const v of g) s += String.fromCharCode(Math.max(0, Math.min(255, Math.round(v + 128))));
+  return btoa(s);
+}
+function unpack(sig){ const s = atob(sig), a = new Float32Array(s.length); for(let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) - 128; return a; }
+// A candidate: a slightly larger area at three scales, so the reference can slide over it.
+function candGrids(px, W, H, cx, cy, boxSide){
+  return [0.88, 0.94, 1, 1.06, 1.12].map(k => { const side = boxSide * PHOTO_FR * k * CW / SIG; return greyGrid(px, W, H, cx - side / 2, cy - side / 2, side, CW); });
+}
+// Only pixels that differ from the shared light-blue backdrop say who someone is (face, hair, skin).
+function prepRef(sig){
+  const r = unpack(sig), h = new Uint32Array(64);
+  for(const v of r) h[Math.max(0, Math.min(63, (v + 128) >> 2))]++;
+  let peak = 0; for(let i = 1; i < 64; i++) if(h[i] > h[peak]) peak = i;
+  const bg = peak * 4 - 128 + 2, idx = [];
+  for(let i = 0; i < r.length; i++) if(Math.abs(r[i] - bg) > 14) idx.push(i);
+  return {r, idx: Uint16Array.from(idx)};
+}
+const hist = new Uint32Array(512);
+function medianOf(n){ let acc = 0; for(let b = 0; b < 512; b++){ acc += hist[b]; if(acc >= n / 2) return b; } return 511; }
+// Robust distance: differences are re-centred on their median (lighting/brightness shifts), then the
+// median absolute deviation is taken, so a digit covering under half the face does not count.
+function scoreAt(ref, c, dx, dy, d){
+  const {r, idx} = ref, n = idx.length; hist.fill(0);
+  for(let k = 0; k < n; k++){ const i = idx[k], x = i % SIG, y = (i / SIG) | 0;
+    const v = r[i] - c[(y + PAD + dy) * CW + PAD + dx + x]; d[k] = v; hist[Math.max(0, Math.min(511, Math.round(v) + 256))]++; }
+  const med = medianOf(n) - 256; hist.fill(0);
+  for(let k = 0; k < n; k++) hist[Math.min(511, Math.round(Math.abs(d[k] - med)))]++;
+  return medianOf(n);
+}
+// Coarse search over every scale and every other shift, then refine around the best spot.
+function score(ref, cands){
+  const n = ref.idx.length; if(n < 60) return Infinity;
+  const d = new Float32Array(n); let best = Infinity, bc = 0, bx = 0, by = 0;
+  cands.forEach((c, ci) => { for(let dy = -PAD; dy <= PAD; dy += 2) for(let dx = -PAD; dx <= PAD; dx += 2){
+    const v = scoreAt(ref, c, dx, dy, d); if(v < best){ best = v; bc = ci; bx = dx; by = dy; } } });
+  for(let ci = Math.max(0, bc - 1); ci <= Math.min(cands.length - 1, bc + 1); ci++)
+    for(let dy = Math.max(-PAD, by - 1); dy <= Math.min(PAD, by + 1); dy++) for(let dx = Math.max(-PAD, bx - 1); dx <= Math.min(PAD, bx + 1); dx++){
+      const v = scoreAt(ref, cands[ci], dx, dy, d); if(v < best) best = v; }
+  return best;
+}
+// For each board tile, the squad member who matches clearly better (by GAP points) than anyone else.
+function matchFaces(tiles, people, limit, gap){
+  const refs = people.map(p => (p.sigs || []).map(prepRef)), pairs = [];
+  tiles.forEach((t, i) => {
+    if(!t.cands) return;
+    const sc = refs.map(rs => rs.length ? Math.min(...rs.map(r => score(r, t.cands))) : Infinity);
+    const order = sc.map((v, j) => j).sort((a, b) => sc[a] - sc[b]);
+    const b = order[0], second = order.length > 1 ? sc[order[1]] : Infinity;
+    if(b != null && sc[b] <= limit && second - sc[b] >= gap) pairs.push({i, j:b, s:sc[b]});
+  });
+  // One squad member per tile and one tile per squad member, best scores first.
+  const usedT = new Set(), usedP = new Set(), out = {};
+  pairs.sort((a, b) => a.s - b.s).forEach(p => { if(usedT.has(p.i) || usedP.has(p.j)) return; usedT.add(p.i); usedP.add(p.j); out[p.i] = p.j; });
+  return out;
+}
+// References for squad members saved before matching existed: build one from their 128 px photo.
+function sigFromPhoto(url){
+  return new Promise(res => { const im = new Image();
+    im.onload = () => { try{ const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); g.drawImage(im, 0, 0, 128, 128);
+      res(refSig(g.getImageData(0, 0, 128, 128).data, 128, 128, 64, 64, 128 / PHOTO_FR)); }catch(e){ res(null); } };
+    im.onerror = () => res(null); im.src = url; });
+}
+function addSig(sq, sig){ if(!sq || !sig) return; sq.sigs = (sq.sigs || []).concat(sig).slice(-4); }
+
+const LINE_COLORS = {red:['Red','#E3262B'], pink:['Pink','#E8408F'], yellow:['Yellow','#F2CE00'], darkblue:['Blue','#155489'], navy:['Blue','#155489'], blue:['Blue','#155489'],
+  green:['Green','#2E8B57'], orange:['Orange','#F07D00'], purple:['Purple','#7B3FB5'], black:['Black','#2B2B2B'], white:['White','#A9B4BE']};
+const FULL_GAME = ['lightblue','cyan','turquoise','skyblue'];
+const BOARD_PROMPT = `You are reading a photo or screenshot of a field hockey substitution board.
+How this board works:
+- Each player is a square headshot. Most have a thick coloured frame. The frame colour is the player's rotation line: players only swap with others of the same colour.
+- A large faded digit printed over the face is that player's bench minutes.
+- A small number in a solid coloured square at the bottom-right corner of the frame is the player's swap order within the line (1 = first to come on).
+- A large X over the face instead of a digit means the player is not playing.
+- A small tag at the bottom-left may show the player's name.
+- Light blue / cyan frames are players who play the whole game, such as the keeper. Headshots without a frame are reserves.
+- There may be a title such as "TEAM A - TEAM B".
+Find every headshot on the board. Reply with only JSON in this shape:
+{"title": string|null, "players": [{"color": "red"|"pink"|"yellow"|"darkblue"|"lightblue"|"green"|"orange"|"purple"|"none", "bench": number|null, "order": number|null, "name": string|null, "excluded": boolean, "box": [x, y, w, h]}]}
+"box" is the headshot including its frame, in coordinates where the whole image is 1000 wide and 1000 tall, with x,y the top-left corner.
+Example entry: {"color":"red","bench":3,"order":1,"name":null,"excluded":false,"box":[92,34,102,135]}
+Read the faded digits carefully. If you cannot read a number, use null.`;
+
+let sampleFn = null, canImg = false, readCtl = null, readMsg = '', lastImport = null;
+
+// ---------- Claude features in the offline app (online only, with the user's own API key) ----------
+// The Claude version gets Claude from the viewer. The offline app has no viewer, so it calls the
+// Claude API directly with a key the user enters; it is stored only on this device.
+const KEY_LS = LS + '.apikey', SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.131.0/+esm';
+function getKey(){ try{ return localStorage.getItem(KEY_LS) || ''; }catch(e){ return ''; } }
+function setKey(k){ try{ if(k) localStorage.setItem(KEY_LS, k); else localStorage.removeItem(KEY_LS); }catch(e){} }
+let sdkMod = null;
+async function apiClient(){
+  sdkMod = sdkMod || await import(SDK_URL);
+  return new sdkMod.default({apiKey:getKey(), dangerouslyAllowBrowser:true});
+}
+// Phone photos can be huge; the API reads images best at about 1600 px on the long side.
+async function blobToBase64Jpeg(blob){
+  const img = await loadImg(blob), sc = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.88).split(',')[1];
+}
+function parseJsonReply(text){
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/); if(fence) text = fence[1];
+  try{ return JSON.parse(text); }catch(e){}
+  const a = text.search(/[\[{]/), b = Math.max(text.lastIndexOf('}'), text.lastIndexOf(']'));
+  if(a >= 0 && b > a) return JSON.parse(text.slice(a, b + 1));
+  throw {code:'invalid_json'};
+}
+function makeApiSample(){
+  const fn = async () => { throw {code:'invalid_request'}; };
+  fn.limits = async () => ({maxPromptBytes:262144, images:{maxCount:5, maxInputBytes:20e6, mediaTypes:['image/jpeg','image/png','image/webp']}});
+  fn.json = async (prompt, opts = {}) => {
+    if(!navigator.onLine) throw {code:'offline'};
+    let client; try{ client = await apiClient(); }catch(e){ throw {code:'offline'}; }
+    const imgs = opts.images ? [].concat(opts.images) : [];
+    const content = [];
+    for(const b of imgs) content.push({type:'image', source:{type:'base64', media_type:'image/jpeg', data: await blobToBase64Jpeg(b)}});
+    content.push({type:'text', text: prompt + '\n\nReply with only the JSON, no other text.'});
+    let res;
+    try{
+      res = await client.beta.messages.create({
+        model:'claude-opus-5-5', max_tokens:16000,
+        output_config:{effort:'high'},
+        betas:['server-side-fallback-2026-07-01'], fallbacks:'default',
+        messages:[{role:'user', content}]
+      }, {signal: opts.signal});
+    }catch(e){
+      const E = sdkMod || {};
+      if(E.APIUserAbortError && e instanceof E.APIUserAbortError) throw {code:'cancelled'};
+      if(E.AuthenticationError && e instanceof E.AuthenticationError) throw {code:'bad_key'};
+      if(E.PermissionDeniedError && e instanceof E.PermissionDeniedError) throw {code:'bad_key'};
+      if(E.RateLimitError && e instanceof E.RateLimitError) throw {code:'rate_limited'};
+      if(E.APIConnectionError && e instanceof E.APIConnectionError) throw {code:'offline'};
+      throw {code:'upstream_error'};
+    }
+    if(res.stop_reason === 'refusal') throw {code:'refused'};
+    const text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    if(!text) throw {code:'empty_completion'};
+    return parseJsonReply(text);
+  };
+  return fn;
+}
+function useApiKey(){
+  sampleFn = OFFLINE && getKey() ? makeApiSample() : (OFFLINE ? null : sampleFn);
+  canImg = !!sampleFn;
+  document.documentElement.classList.toggle('has-key', OFFLINE && !!getKey());
+}
+if(OFFLINE) useApiKey();
+if(window.claude && window.claude.use){
+  window.claude.use('sample').then(async s => {
+    sampleFn = s;
+    if(s){ const l = await s.limits().catch(() => null); canImg = !!(l && l.images); }
+    if(S.view === 'setup') renderSetup();
+  }).catch(() => {});
+}
+function setReadMsg(m){ readMsg = m; const el = $('readstatus'); if(el) el.textContent = m; }
+function readErr(e){
+  const c = e && e.code;
+  if(c === 'cancelled') return 'Stopped.';
+  if(c === 'bad_key') return 'Your Claude API key wasn’t accepted. Check it in Setup → Claude features.';
+  if(c === 'offline') return 'No internet right now. Reading photos needs a connection; everything else keeps working.';
+  if(c === 'not_granted' || c === 'sampling_disabled' || c === 'images_unavailable') return 'Claude isn’t allowed to read images for this page, so you’ll need to set up the lines by hand.';
+  if(c === 'rate_limited') return 'Too many requests right now. Try again in a minute.';
+  if(c === 'image_rejected') return 'That image couldn’t be used. Try a screenshot or a JPEG or PNG photo.';
+  if(c === 'invalid_json' || c === 'empty_completion') return 'Claude’s answer couldn’t be read. Try uploading again.';
+  return 'Something went wrong reading the photo. Try uploading again.';
+}
+async function readBoard(file){
+  setReadMsg('Preparing the photo…');
+  let cv;
+  try{
+    const img = await loadImg(file), sc = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+    cv = document.createElement('canvas'); cv.width = Math.round(img.naturalWidth * sc); cv.height = Math.round(img.naturalHeight * sc);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  }catch(e){ setReadMsg('That file couldn’t be opened as a picture.'); return; }
+  const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+  readCtl = new AbortController(); setReadMsg('Claude is reading the board. This can take up to a minute…'); renderSetup();
+  try{
+    const known = Object.keys(S.squad || {}).filter(k => S.squad[k].photo && isRealName(S.squad[k].name)).slice(0, 36).map(k => ({pid:k, name:S.squad[k].name, photo:S.squad[k].ref || S.squad[k].photo}));
+    const lim = await sampleFn.limits().catch(() => null), images = [blob];
+    let prompt = BOARD_PROMPT;
+    if(known.length && lim && lim.images && lim.images.maxCount >= 2){ images.push(await squadSheet(known)); prompt += SQUAD_PROMPT; }
+    const res = await sampleFn.json(prompt, {images, modelTier:'complex', signal:readCtl.signal});
+    setReadMsg('Matching faces against your squad…');
+    const pool = Object.keys(S.squad || {}).filter(k => isRealName(S.squad[k].name));
+    for(const k of pool) if(!(S.squad[k].sigs || []).length && S.squad[k].photo) addSig(S.squad[k], await sigFromPhoto(S.squad[k].photo));
+    let px = null; try{ px = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; }catch(e){}
+    const made = buildFromBoard(res, cv, images.length > 1 ? known : [], px, pool);
+    syncSquadPhotos();
+    if(!made.setup.tracks.length){ setReadMsg('No colour lines with two or more players were found in that photo.'); return; }
+    const id = 's' + Date.now(), running = G().phase !== 'pre';
+    S.schedules.push({id, name:made.name, setup:made.setup, others:made.skipped});
+    if(!running){ S.activeId = id; S.game = newGame(made.setup); }
+    lastImport = {id, skipped:made.skipped};
+    const n = made.setup.tracks.reduce((a, t) => a + t.players.length, 0);
+    ensureSquad();
+    setReadMsg(`${running ? 'Saved (reset the game to switch to it): ' : ''}Made “${made.name}” with ${made.setup.tracks.length} lines and ${n} players.${made.matched ? ` Recognised ${made.matched} from your squad${made.byPhoto ? ` (${made.byPhoto} by photo match)` : ''}.` : ''}${made.unsure ? ` ${made.unsure} bench time${made.unsure>1?'s':''} couldn’t be read and ${made.unsure>1?'were':'was'} set to 2 min.` : ''} Check the numbers against your board before the game.`);
+    save();
+  }catch(e){ setReadMsg(readErr(e)); }
+  finally{ readCtl = null; show(); }
+}
+const SQUAD_PROMPT = `
+The second image is the squad sheet: known players as they looked on earlier boards (some pictures may instead be studio photos on a dark background), each with a number in a black box at its top-left corner.
+For every player on the board, add "squad": the number of the same person on the squad sheet, or null if they are not on it. Big faded numbers and X marks are printed over the photos on BOTH images. They change every week and are not part of the person: ignore them completely and compare only the person (face shape, hair, skin, eyebrows, smile). The same headshot photo is often reused, so the same person usually has the same pose and background. Only match when you are confident, and never use one squad number twice.`;
+// Draw known players into one numbered grid image so one call can match faces.
+async function squadSheet(entries, label){
+  label = label || (i => String(i + 1));
+  const cols = 6, T = 128, cv = document.createElement('canvas'), g = cv.getContext('2d');
+  cv.width = cols * T; cv.height = Math.ceil(entries.length / cols) * T;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  await Promise.all(entries.map((e, i) => new Promise(res => { const im = new Image();
+    im.onload = () => { g.drawImage(im, (i % cols) * T, Math.floor(i / cols) * T, T, T); res(); }; im.onerror = res; im.src = e.photo; })));
+  entries.forEach((e, i) => { const x = (i % cols) * T, y = Math.floor(i / cols) * T;
+    g.fillStyle = '#000'; g.fillRect(x, y, 36, 28); g.fillStyle = '#fff'; g.font = 'bold 22px sans-serif'; g.fillText(label(i), x + 5, y + 22); });
+  return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+}
+function buildFromBoard(res, cv, known, px, pool){
+  known = known || []; pool = pool || [];
+  const list = res && Array.isArray(res.players) ? res.players : [], W = cv.width, H = cv.height;
+  // Photo matching first: it compares the headshots themselves and ignores the printed numbers.
+  const tiles = list.map(p => {
+    const bx = Array.isArray(p.box) && p.box.length >= 4 ? p.box.map(Number) : null; if(!bx || !px) return {};
+    const cx = (bx[0] + bx[2] / 2) / 1000 * W, cy = (bx[1] + bx[3] / 2) / 1000 * H, side = Math.min(bx[2] / 1000 * W, bx[3] / 1000 * H);
+    return side > 8 ? {cands:candGrids(px, W, H, cx, cy, side), sig:refSig(px, W, H, cx, cy, side)} : {};
+  });
+  const local = px && pool.length ? matchFaces(tiles, pool.map(k => S.squad[k]), 30, 4) : {};
+  const taken = new Set(Object.values(local).map(j => pool[j]));
+  const groups = {}, skipped = [], used = new Set(); let unsure = 0, matched = 0, byPhoto = 0;
+  list.forEach((p, i) => {
+    const crop = cropBox(cv, p.box); let photo = crop, name = p.name ? String(p.name).slice(0, 30) : '', pid = null;
+    const col = String(p.color || 'none').toLowerCase().replace(/[^a-z]/g, ''), sn = Number(p.squad), sig = tiles[i].sig || null;
+    if(local[i] != null){ pid = pool[local[i]]; matched++; byPhoto++; }
+    else if(sn >= 1 && sn <= known.length && !used.has(sn) && !taken.has(known[sn - 1].pid)){ used.add(sn); pid = known[sn - 1].pid; taken.add(pid); matched++; }
+    else if(isRealName(name) && squadByName(name) && !taken.has(squadByName(name))){ pid = squadByName(name); taken.add(pid); }
+    if(pid && S.squad[pid]){ name = S.squad[pid].name; photo = S.squad[pid].photo || photo; addSig(S.squad[pid], sig); if(crop) S.squad[pid].ref = crop; }
+    if(p.excluded){ skipped.push({photo, name, why:'Not playing', pid: pid || uid(), sig}); return; }
+    if(FULL_GAME.includes(col)){ skipped.push({photo, name, why:'Full game', pid: pid || uid(), sig}); return; }
+    if(col === 'none' || !col){ skipped.push({photo, name, why:'Reserve', pid: pid || uid(), sig}); return; }
+    let bench = Number(p.bench); if(!(bench > 0)){ bench = 2; unsure++; }
+    (groups[col] = groups[col] || []).push({name, bench, order:Number(p.order) || 99, photo, pid, sig});
+  });
+  const tracks = [];
+  Object.keys(groups).forEach((col, k) => {
+    const ps = groups[col];
+    if(ps.length < 2){ ps.forEach(p => skipped.push({photo:p.photo, name:p.name, why:'Reserve', pid:p.pid || uid(), sig:p.sig})); return; }
+    ps.sort((a, b) => a.order - b.order);
+    const [label, hex] = LINE_COLORS[col] || [col[0].toUpperCase() + col.slice(1), '#6B7B8C'];
+    tracks.push({id:'t' + Date.now() + k, name:label, color:hex, offset:0,
+      players: ps.map((p, i) => ({name: p.name || `${label} ${i+1}`, bench:p.bench, photo:p.photo, pid:p.pid || uid(), sig:p.pid ? undefined : p.sig}))});
+  });
+  skipped.forEach(o => { if(S.squad[o.pid]) delete o.sig; });
+  const title = res && res.title ? String(res.title).slice(0, 40) : 'Board ' + new Date().toLocaleDateString();
+  return {name:title, unsure, matched, byPhoto, skipped, setup:{quarterMin:U().quarterMin, quarters:U().quarters, tracks}};
+}
+document.addEventListener('change', async e => {
+  const el = e.target, files = el.files ? [...el.files] : [], f = files[0]; if(!f) return;
+  el.value = '';
+  if(el.id === 'clean-files'){ cleanUpload(files); return; }
+  if(el.id === 'team-files'){ teamUpload(files); return; }
+  if(el.id === 'import-file'){ importFile(f); return; }
+  if(el.id === 'board-file'){
+    if(readCtl) return;
+    if(!sampleFn){ setReadMsg('This page can’t reach Claude where it’s open now, so it can’t read the photo. Open the link in the Claude app or in a browser where you’re signed in to claude.ai. You can still add photos one by one by tapping a player’s picture below.'); return; }
+    readBoard(f); return;
+  }
+  let p = null, m;
+  if(m = el.id.match(/^ph-(.+)-(\d+)$/)){ const t = track(m[1]); p = t && t.players[+m[2]]; }
+  else if(m = el.id.match(/^oph-(\d+)$/)) p = (sched().others || [])[+m[1]];
+  else if(m = el.id.match(/^sqph-(.+)$/)){ if(!S.squad[m[1]]) return; try{ const it = await cleanItem(f); setSquadPhoto(m[1], it.photo, it.sig); }catch(err){} save(); renderSetup(); renderGame(); update(); return; }
+  if(!p) return;
+  try{ const img = await loadImg(f), w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h);
+    const photo = squareFrom(img, (w - side)/2, (h - side)/2, side);
+    p.photo = photo;
+    if(p.pid && S.squad[p.pid]){ S.squad[p.pid].photo = photo; allPlayers().forEach(q => { if(q.pid === p.pid) q.photo = photo; }); }
+  }catch(err){ return; }
+  save(); renderSetup(); renderGame(); update();
+});
+
+// ---------- clean headshots ----------
+let cleanMsg = '', cleanPending = [];
+// Read one headshot: a square from the top-middle of a portrait (where the face is), at 256 px for matching.
+async function cleanItem(file){
+  const img = await loadImg(file), w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h);
+  const sx = (w - side) / 2, sy = h > w ? Math.min((h - side) / 2, h * 0.06) : 0;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); g.drawImage(img, sx, sy, side, side, 0, 0, 256, 256);
+  const px = g.getImageData(0, 0, 256, 256).data;
+  return {photo:squareFrom(c, 0, 0, 256), sig:refSig(px, 256, 256, 128, 128, 256 / PHOTO_FR), cands:candGrids(px, 256, 256, 128, 128, 256 / PHOTO_FR)};
+}
+function setSquadPhoto(pid, photo, sig){
+  const sq = S.squad[pid]; if(!sq) return;
+  sq.photo = photo; sq.clean = true; addSig(sq, sig);
+  allPlayers().forEach(p => { if(p.pid === pid) p.photo = photo; });
+}
+function setCleanMsg(m){ cleanMsg = m; const el = $('cleanmsg'); if(el) el.textContent = m; }
+async function cleanUpload(files){
+  const pool = Object.keys(S.squad || {}).filter(k => isRealName(S.squad[k].name));
+  if(!pool.length){ setCleanMsg('Name your players first (or upload a board), so the app knows who to match the photos to.'); return; }
+  setCleanMsg(`Matching ${files.length} photo${files.length > 1 ? 's' : ''} to your squad…`);
+  for(const k of pool) if(!(S.squad[k].sigs || []).length && S.squad[k].photo) addSig(S.squad[k], await sigFromPhoto(S.squad[k].photo));
+  const items = []; for(const f of files){ try{ items.push(await cleanItem(f)); }catch(e){} }
+  const local = matchFaces(items, pool.map(k => S.squad[k]), 30, 4), done = new Set(), usedP = new Set();
+  Object.keys(local).forEach(i => { const pid = pool[local[i]]; setSquadPhoto(pid, items[i].photo, items[i].sig); done.add(+i); usedP.add(pid); });
+  let rest = items.map((it, i) => i).filter(i => !done.has(i)), byClaude = 0;
+  // Ask Claude to pair the rest by face: one sheet of the new photos (A, B, …), one of the squad (1, 2, …).
+  const lim = sampleFn ? await sampleFn.limits().catch(() => null) : null;
+  const left = pool.filter(k => !usedP.has(k) && S.squad[k].photo);
+  if(rest.length && left.length && lim && lim.images && lim.images.maxCount >= 2){
+    setCleanMsg('Asking Claude to recognise the rest…');
+    try{
+      const L = i => String.fromCharCode(65 + (i % 26)) + (i >= 26 ? Math.floor(i / 26) : '');
+      const sheetA = await squadSheet(rest.slice(0, 36).map(i => items[i]), L), sheetB = await squadSheet(left.slice(0, 36).map(k => S.squad[k]));
+      const ans = await sampleFn.json(`The first image shows new headshots, each with a letter in a black box. The second shows squad members, each with a number in a black box. Some squad pictures have big faded numbers or an X printed over the face; ignore those marks and compare only the people (face shape, hair, skin, features). Reply with only JSON mapping each letter to the number of the same person, or null if they are not in the squad, for example {"A": 3, "B": null}. Never use one number twice, and only match when you are confident.`, {images:[sheetA, sheetB], modelTier:'complex'});
+      rest.slice(0, 36).forEach((i, n) => { const num = Number(ans && ans[L(n)]), pid = left[num - 1];
+        if(num >= 1 && pid && !usedP.has(pid)){ setSquadPhoto(pid, items[i].photo, items[i].sig); usedP.add(pid); done.add(i); byClaude++; } });
+    }catch(e){}
+  }
+  rest = items.map((it, i) => i).filter(i => !done.has(i));
+  cleanPending = cleanPending.concat(rest.map(i => ({photo:items[i].photo, sig:items[i].sig, name:''})));
+  const n = done.size;
+  setCleanMsg(`${n} photo${n === 1 ? '' : 's'} matched${byClaude ? ` (${byClaude} by Claude)` : ''}.${rest.length ? ` Choose who the other ${rest.length} ${rest.length === 1 ? 'is' : 'are'} below.` : ''}`);
+  save(); renderSetup(); renderGame(); update();
+}
+
+// ---------- team page screenshots ----------
+const TEAM_PROMPT = `This is a screenshot of a team page from a sports app or website. Each player has a photo (often round) with their name underneath.
+Reply with only JSON: {"players": [{"first": string, "last": string, "box": [x, y, w, h]}]}
+"box" is the player's photo only (not the name), in coordinates where the whole image is 1000 wide and 1000 tall, with x,y the top-left corner.
+Only include players whose photo AND name are both fully visible; skip anyone cut off at the top or bottom edge.
+Example: {"first": "Elena", "last": "Sotgiu", "box": [134, 210, 236, 108]}`;
+function lev(a, b){ const d = Array.from({length:a.length + 1}, (x, i) => [i]); for(let j = 1; j <= b.length; j++) d[0][j] = j;
+  for(let i = 1; i <= a.length; i++) for(let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return d[a.length][b.length]; }
+// Find the squad member a full name belongs to: same first name, initials like "M&M", or a one-letter typo.
+function findSquad(first, last){
+  const f = String(first || '').trim().toLowerCase(), full = (f + ' ' + String(last || '').trim().toLowerCase()).trim(), ks = Object.keys(S.squad), nm = k => S.squad[k].name.trim().toLowerCase();
+  const one = list => list.length === 1 ? list[0] : null;
+  const f1 = f.split(/\s+/)[0]; // "Ivanna Berenice" is usually just "Ivanna"
+  return one(ks.filter(k => nm(k) === f || nm(k) === full || nm(k) === f1))
+    || one(ks.filter(k => nm(k).replace(/\s/g, '') === f1.split('-').map(w => w[0]).join('&')))
+    || one(ks.filter(k => nm(k).length > 3 && lev(nm(k), f1) <= (f1.length > 5 ? 2 : 1)));
+}
+// Tighten Claude's box to the photo itself: everything that differs from the page background around it.
+function refineBox(px, W, H, x, y, w, h){
+  const pad = Math.max(w, h) * 0.12, x0 = Math.max(0, Math.floor(x - pad)), y0 = Math.max(0, Math.floor(y - pad)), x1 = Math.min(W - 1, Math.ceil(x + w + pad)), y1 = Math.min(H - 1, Math.ceil(y + h + pad));
+  const i0 = (y0 * W + x0) * 4, bg = [px[i0], px[i0 + 1], px[i0 + 2]];
+  let a = x1, b = y1, c = x0, d = y0;
+  for(let Y = y0; Y <= y1; Y += 2) for(let X = x0; X <= x1; X += 2){ const i = (Y * W + X) * 4;
+    if(Math.abs(px[i] - bg[0]) + Math.abs(px[i + 1] - bg[1]) + Math.abs(px[i + 2] - bg[2]) > 60){ if(X < a) a = X; if(X > c) c = X; if(Y < b) b = Y; if(Y > d) d = Y; } }
+  if(c - a < w * 0.6 || d - b < h * 0.6) return [x, y, Math.min(w, h)];
+  return [a, b, c - a];
+}
+function circleAvatar(src, x, y, side){
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#0e1319'; g.fillRect(0, 0, 128, 128); g.save(); g.beginPath(); g.arc(64, 64, 64, 0, Math.PI * 2); g.clip();
+  g.drawImage(src, x, y, side, side, 0, 0, 128, 128); g.restore(); return c.toDataURL('image/jpeg', 0.85);
+}
+async function teamUpload(files){
+  const lim = sampleFn ? await sampleFn.limits().catch(() => null) : null;
+  if(!lim || !lim.images){ setCleanMsg('Reading screenshots needs Claude, which works when this page is open in Claude.'); return; }
+  const found = {};
+  for(let n = 0; n < files.length; n++){
+    setCleanMsg(`Reading screenshot ${n + 1} of ${files.length}…`);
+    try{
+      const img = await loadImg(files[n]), sc = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement('canvas'); cv.width = Math.round(img.naturalWidth * sc); cv.height = Math.round(img.naturalHeight * sc);
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0, cv.width, cv.height);
+      const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+      const res = await sampleFn.json(TEAM_PROMPT, {images:[blob], modelTier:'default'});
+      const px = g.getImageData(0, 0, cv.width, cv.height).data;
+      (res && Array.isArray(res.players) ? res.players : []).forEach(p => {
+        const bx = Array.isArray(p.box) ? p.box.map(Number) : null; if(!bx || !p.first) return;
+        const [x, y, side] = refineBox(px, cv.width, cv.height, bx[0] / 1000 * cv.width, bx[1] / 1000 * cv.height, bx[2] / 1000 * cv.width, bx[3] / 1000 * cv.height);
+        const key = (String(p.first) + ' ' + String(p.last || '')).trim().toLowerCase();
+        if(side > 20 && (!found[key] || found[key].side < side)) found[key] = {first:String(p.first).trim(), last:String(p.last || '').trim(), side, photo:circleAvatar(cv, x, y, side)};
+      });
+    }catch(e){ if(e && e.code === 'not_granted'){ setCleanMsg(readErr(e)); return; } }
+  }
+  let updated = [], added = [];
+  Object.values(found).forEach(p => {
+    const pid = findSquad(p.first, p.last);
+    if(pid){ setSquadPhoto(pid, p.photo, null); updated.push(S.squad[pid].name); }
+    else { const id = uid(); S.squad[id] = {name:p.first, photo:p.photo, clean:true, sigs:[]}; added.push(p.first); }
+  });
+  setCleanMsg(Object.keys(found).length
+    ? `New photos for ${updated.length} player${updated.length === 1 ? '' : 's'}${updated.length ? ': ' + updated.join(', ') : ''}.${added.length ? ` Added ${added.length} new: ${added.join(', ')}.` : ''} Check the squad list below.`
+    : 'No players with a photo and a name were found in those screenshots.');
+  save(); renderSetup(); renderGame(); update();
+}
+
+// ---------- moving data between the Claude version and the offline app ----------
+let moveMsg = '';
+function setMoveMsg(m){ moveMsg = m; const el = $('movemsg'); if(el) el.textContent = m; }
+function exportData(){
+  const resolve = p => Object.assign({}, p, {photo: photoOf(p)});
+  return JSON.stringify({app:'line-swap-clock', v:1, exportedAt:new Date().toISOString(), activeId:S.activeId,
+    schedules:S.schedules.map(sc => ({id:sc.id, name:sc.name, others:(sc.others || []).map(resolve),
+      setup:Object.assign({}, sc.setup, {tracks:sc.setup.tracks.map(t => Object.assign({}, t, {players:t.players.map(resolve)}))})})),
+    squad:S.squad, matches:S.matches});
+}
+async function exportFile(){
+  const name = `swap-clock ${new Date().toISOString().slice(0, 10)}.json`, data = exportData();
+  if(dl){ try{ await dl.save({filename:name, data}); setMoveMsg(OFFLINE ? 'Saved. Import it in the Claude version.' : 'Saved. Now open the offline app and tap Import.'); }
+    catch(e){ setMoveMsg(e && e.code === 'declined' ? '' : 'The file couldn’t be saved here.'); } return; }
+  plainDownload(name, data, 'application/json');
+  setMoveMsg(OFFLINE ? 'Saved to your downloads. Import it in the Claude version.' : 'Saved. Now open the offline app and tap Import.');
+}
+async function importFile(file){
+  let d; try{ d = JSON.parse(await file.text()); }catch(e){ d = null; }
+  if(!d || d.app !== 'line-swap-clock' || !Array.isArray(d.schedules)){ setMoveMsg('That file isn’t a Swap Clock export. Use the file made by “Export”.'); return; }
+  d.schedules.forEach(sc => { const i = S.schedules.findIndex(x => x.id === sc.id); if(i >= 0) S.schedules[i] = sc; else S.schedules.push(sc); });
+  Object.keys(d.squad || {}).forEach(k => { S.squad[k] = d.squad[k]; });
+  let added = 0; (d.matches || []).forEach(m => { const i = S.matches.findIndex(x => x.id === m.id); if(i >= 0) S.matches[i] = m; else { S.matches.push(m); added++; } });
+  const running = G().phase !== 'pre' && G().phase !== 'final';
+  if(!running && d.activeId && S.schedules.some(x => x.id === d.activeId)){ S.activeId = d.activeId; S.game = newGame(U()); }
+  ensureSquad(); mergeSquadDuplicates(); syncSquadPhotos(); save(); show();
+  setMoveMsg(`Imported ${d.schedules.length} schedule${d.schedules.length === 1 ? '' : 's'}, ${Object.keys(d.squad || {}).length} players${added ? ` and ${added} match${added === 1 ? '' : 'es'}` : ''}.${running ? ' A game is running, so finish or reset it to switch schedules.' : ''}`);
+}
+
+// ---------- report actions ----------
+async function copyReport(){
+  const txt = reportText(), box = $('reporttext');
+  try{ await navigator.clipboard.writeText(txt); reportMsg = 'Report copied. Paste it into WhatsApp, email or a message.'; if(box) box.hidden = true; }
+  catch(e){ reportMsg = 'Copying isn’t allowed here, so the report is below. Select it and copy.'; if(box){ box.value = txt; box.hidden = false; box.focus(); box.select(); } }
+  const m = $('reportmsg'); if(m) m.textContent = reportMsg;
+}
+function plainDownload(name, text, type){
+  const a = document.createElement('a'), url = URL.createObjectURL(new Blob([text], {type}));
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+async function saveCsv(){
+  if(!dl){ plainDownload(`${(sched().name || 'match').replace(/[^\w\- ]+/g, '').trim() || 'match'} ${new Date().toISOString().slice(0, 10)}.csv`, reportCsv(), 'text/csv'); reportMsg = 'Spreadsheet saved.'; const m = $('reportmsg'); if(m) m.textContent = reportMsg; return; }
+  const nm = (sched().name || 'match').replace(/[^\w\- ]+/g, '').trim() || 'match';
+  try{ await dl.save({filename:`${nm} ${new Date().toISOString().slice(0, 10)}.csv`, data:reportCsv()}); reportMsg = 'Spreadsheet saved.'; }
+  catch(e){ reportMsg = e && e.code === 'declined' ? '' : 'The spreadsheet couldn’t be saved here. Use Copy report instead.'; }
+  const m = $('reportmsg'); if(m) m.textContent = reportMsg;
+}
+
+// ---------- online backup and live sharing ----------
+// Local storage stays the working copy. When the page can reach its online store, every schedule,
+// squad member, saved match and the live game are mirrored there, and changes from other phones
+// (yours or a coach's) flow back in live.
+const DEVICE = (() => { try{ let d = localStorage.getItem(LS + '.device'); if(!d){ d = uid(); localStorage.setItem(LS + '.device', d); } return d; }catch(e){ return uid(); } })();
+function stable(v){ return JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => (o[key] = x[key], o), {}) : x); }
+function cloudSchedule(sc){
+  const sq = S.squad || {}, lite = p => (p.pid && sq[p.pid] && sq[p.pid].photo && sq[p.pid].photo === p.photo) ? Object.assign({}, p, {photo:'@squad'}) : p;
+  return {name:sc.name, setup:Object.assign({}, sc.setup, {tracks:sc.setup.tracks.map(t => Object.assign({}, t, {players:t.players.map(lite)}))}), others:(sc.others || []).map(lite)};
+}
+function cloudDocs(){
+  const m = {};
+  S.schedules.forEach(sc => { m['schedules/' + sc.id] = cloudSchedule(sc); });
+  Object.keys(S.squad || {}).forEach(k => { m['squad/' + k] = S.squad[k]; });
+  S.matches.forEach(x => { m['matches/' + x.id] = x; });
+  m['live/game'] = {game:Object.assign({}, S.game, {history:[]}), activeId:S.activeId};
+  return JSON.parse(JSON.stringify(m));
+}
+function setSync(st){ sync.status = st; const el = $('syncstat'); if(el){ el.textContent = {local:'On this phone only', saving:'Saving…', saved:'Backed up', error:'Backup paused'}[st] || ''; el.dataset.st = st; }
+  const info = $('syncinfo'); if(info) info.innerHTML = syncInfo(); }
+function syncInfo(){
+  if(!db) return 'Everything is saved on this phone only. Online backup works when this page is open in Claude while you’re signed in.';
+  if(sync.status === 'error') return 'Online backup hit a problem, so changes are kept on this phone for now and will be tried again on your next change.';
+  return 'Everything is backed up online and stays in sync on any phone or computer where you open this page. To share the live game with a coach, use the <b>Share</b> button at the top of this page and give them edit access. They’ll see the same clock and swaps and can call swaps too.';
+}
+function queueSync(){ if(!db || !sync.ready || applyingRemote) return; clearTimeout(sync.timer); sync.timer = setTimeout(pushSync, 700); }
+async function pushSync(){
+  if(!db || !sync.ready) return;
+  if(sync.running){ sync.dirty = true; return; }
+  sync.running = true; let failed = false; setSync('saving');
+  try{
+    do{
+      sync.dirty = false;
+      const want = cloudDocs();
+      for(const p of Object.keys(want)){
+        const js = stable(want[p]); if(sync.last[p] === js) continue;
+        if(js.length > 250000){ failed = true; continue; }
+        const prev = sync.last[p]; sync.last[p] = js;
+        try{ await db.doc(p).set(Object.assign({}, want[p], {_by:DEVICE, _at:Date.now()})); }
+        catch(e){ if(prev === undefined) delete sync.last[p]; else sync.last[p] = prev; failed = true; }
+      }
+      for(const p of Object.keys(sync.last)){ if(!(p in want)){ try{ await db.doc(p).delete(); delete sync.last[p]; }catch(e){ failed = true; } } }
+    } while(sync.dirty);
+  } finally { sync.running = false; setSync(failed ? 'error' : 'saved'); }
+}
+function strip(d){ const o = Object.assign({}, d); delete o._by; delete o._at; return JSON.parse(JSON.stringify(o)); }
+function applyDoc(col, id, body){
+  if(col === 'schedules'){
+    const sc = S.schedules.find(x => x.id === id);
+    if(sc) Object.assign(sc, {name:body.name, setup:body.setup, others:body.others || []}); else S.schedules.push({id, name:body.name, setup:body.setup, others:body.others || []});
+  } else if(col === 'squad'){
+    // A new clean photo from another phone replaces that player's picture in every schedule too.
+    const before = S.squad[id]; S.squad[id] = body;
+    if(body.clean && body.photo && (!before || before.photo !== body.photo)) allPlayers().forEach(p => { if(p.pid === id) p.photo = body.photo; });
+  }
+  else if(col === 'matches'){ const i = S.matches.findIndex(x => x.id === id); if(i >= 0) S.matches[i] = body; else S.matches.push(body); }
+}
+function removeDoc(col, id){
+  if(col === 'schedules'){ S.schedules = S.schedules.filter(x => x.id !== id);
+    if(!S.schedules.length) S.schedules.push({id:'s1', name:'BRAX - LEOP', setup:clone(DEFAULT_SETUP)});
+    if(!S.schedules.some(x => x.id === S.activeId)){ S.activeId = S.schedules[0].id; S.game = newGame(U()); } }
+  else if(col === 'squad') delete S.squad[id];
+  else if(col === 'matches') S.matches = S.matches.filter(x => x.id !== id);
+}
+let remoteTimer = null;
+function afterRemote(){
+  // Fill in photos that point at squad members now that both have arrived.
+  allPlayers().forEach(p => { if(p.photo === '@squad' && S.squad[p.pid] && S.squad[p.pid].photo) p.photo = S.squad[p.pid].photo; });
+  const fixed = ensureGameFits(); if(sync.ready) mergeSquadDuplicates();
+  if(syncSquadPhotos() || fixed) queueSync();
+  applyingRemote = true; try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} applyingRemote = false;
+  // Don't redraw Setup under someone's fingers while they type.
+  clearTimeout(remoteTimer);
+  remoteTimer = setTimeout(() => { const a = document.activeElement; if(S.view === 'setup' && a && a.matches('input,select')) return; show(); }, 150);
+}
+function markGot(key, snap){
+  if(snap.metadata && snap.metadata.fromCache) return;
+  sync.got.add(key);
+  if(!sync.ready && sync.got.size === 4){
+    sync.ready = true;
+    // A phone opening this page for the first time takes the online copy instead of its example board.
+    if(FRESH && Object.keys(sync.last).some(p => p.startsWith('schedules/'))){
+      S.schedules = S.schedules.filter(sc => sync.last['schedules/' + sc.id]);
+      if(!S.schedules.some(x => x.id === S.activeId)){ S.activeId = S.schedules[0].id; S.game = newGame(U()); }
+      afterRemote();
+    }
+    pushSync();
+  }
+}
+function startSync(){
+  ['schedules', 'squad', 'matches'].forEach(col => {
+    db.collection(col).onSnapshot(snap => {
+      let changed = false; const seen = new Set();
+      snap.docs.forEach(d => { const p = col + '/' + d.id; seen.add(p);
+        const body = strip(d.data()), js = stable(body);
+        if(sync.last[p] === js) return;
+        sync.last[p] = js; applyDoc(col, d.id, body); changed = true; });
+      if(!snap.metadata.fromCache && sync.ready){
+        Object.keys(sync.last).filter(p => p.startsWith(col + '/') && !seen.has(p)).forEach(p => { delete sync.last[p]; removeDoc(col, p.slice(col.length + 1)); changed = true; });
+      }
+      if(changed) afterRemote();
+      markGot(col, snap);
+    }, () => setSync('error'));
+  });
+  db.doc('live/game').onSnapshot(snap => {
+    if(snap.exists){
+      const body = strip(snap.data()), js = stable(body);
+      if(sync.last['live/game'] !== js && body.game){
+        sync.last['live/game'] = js;
+        S.game = body.game; S.game.history = []; // undo only covers this phone's own actions
+        if(body.activeId && S.schedules.some(x => x.id === body.activeId)) S.activeId = body.activeId;
+        injUI = null; cardUI = null; afterRemote();
+      }
+    }
+    markGot('live', snap);
+  }, () => setSync('error'));
+}
+if(window.claude && window.claude.use){
+  window.claude.use('db').then(d => { if(d){ db = d; setSync('saving'); startSync(); setTimeout(() => { if(!sync.ready) setSync('error'); }, 20000); } else setSync('local'); }).catch(() => setSync('local'));
+  window.claude.use('downloads').then(d => { dl = d; if(S.view === 'minutes') renderMinutes(); }).catch(() => {});
+}
+
+// ---------- clicks ----------
+let resetArm = 0;
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if(!b || b.disabled) return;
+  const a = b.dataset.act, u = U();
+  // Tap protection: "Swap done" / "Already swapped" need a second tap within 3 s.
+  if(a === 'swap' && S.settings.confirm && !(b.dataset.armed && Date.now() - b.dataset.armed < 3000)){
+    const old = b.textContent; b.dataset.armed = Date.now(); b.textContent = 'Tap again to confirm'; b.classList.add('armed');
+    setTimeout(() => { if(b.isConnected){ b.textContent = old; delete b.dataset.armed; b.classList.remove('armed'); } }, 3000);
+    return;
+  }
+  if(a === 'tab'){ S.view = b.dataset.v; save(); show(); }
+  else if(a === 'testbuzz'){ ensureAudio(); beep(3, 1040); buzz([300,120,300,120,300]);
+    $('buzzmsg').textContent = canVibrate() ? 'Did your phone buzz? If not, check that vibration is on in your phone’s sound settings.'
+      : 'You should hear three beeps. On iPhone you may feel a light tap instead of a strong buzz, because iPhones limit what web pages can do. Keep the volume up and silent mode off.'; }
+  else if(a === 'cardopen'){ cardUI = cardUI && cardUI.id === b.dataset.id ? null : {id:b.dataset.id, k:null}; injUI = null; renderGame(); update(); }
+  else if(a === 'cardpick'){ cardUI = {id:b.dataset.id, k:+b.dataset.k}; renderGame(); update(); }
+  else if(a === 'cardclose'){ cardUI = null; renderGame(); update(); }
+  else if(a === 'cardgive') giveCard(b.dataset.id, +b.dataset.k, b.dataset.type);
+  else if(a === 'practice'){ S.game = newGame(U()); S.game.speed = 10; S.game.practice = true; save(); show(); }
+  else if(a === 'endpractice'){ S.game = newGame(U()); save(); show(); }
+  else if(a === 'copyreport') copyReport();
+  else if(a === 'csv') saveCsv();
+  else if(a === 'savematch'){ saveMatch(); reportMsg = 'Added to the season log.'; renderMinutes(); }
+  else if(a === 'delmatch'){ S.matches = S.matches.filter(x => x.id !== b.dataset.mid); save(); renderMinutes(); }
+  else if(a === 'addo'){ const sc = sched(); sc.others = sc.others || []; sc.others.push({name:'', photo:'', why:'Reserve', pid:uid()}); save(); renderSetup(); }
+  else if(a === 'delo'){ (sched().others || []).splice(+b.dataset.i, 1); save(); renderSetup(); }
+  else if(a === 'go') go();
+  else if(a === 'fullscreen'){
+    // Fills the screen, hiding the viewer's banner, where the device allows it.
+    const el = document.documentElement;
+    if(document.fullscreenElement) document.exitFullscreen && document.exitFullscreen().catch(() => {});
+    else if(el.requestFullscreen) el.requestFullscreen().catch(() => { b.hidden = true; });
+  }
+  else if(a === 'adj') adj(+b.dataset.d);
+  else if(a === 'swap') swap(b.dataset.id);
+  else if(a === 'undo') undo();
+  else if(a === 'resetlines') resetLines();
+  else if(a === 'injopen'){ injUI = injUI && injUI.id === b.dataset.id ? null : {id:b.dataset.id, k:null}; cardUI = null; renderGame(); update(); }
+  else if(a === 'injpick'){ injUI = {id:b.dataset.id, k:+b.dataset.k}; renderGame(); update(); }
+  else if(a === 'injclose'){ injUI = null; renderGame(); update(); }
+  else if(a === 'injbench') injure(b.dataset.id, +b.dataset.k, 'bench');
+  else if(a === 'injres'){ const inp = $('res-' + b.dataset.id); injure(b.dataset.id, +b.dataset.k, 'reserve', inp ? inp.value : ''); }
+  else if(a === 'back') backOn(b.dataset.id, +b.dataset.k);
+  else if(a === 'stagger') autoStagger();
+  else if(a === 'addp'){ const t = track(b.dataset.id); t.players.push({name:`${t.name} ${t.players.length+1}`, bench:2}); structural(); }
+  else if(a === 'delp'){ track(b.dataset.id).players.splice(+b.dataset.k, 1); structural(); }
+  else if(a === 'addt'){ const id = 't' + Date.now(); u.tracks.push({id, name:'New line', color:'#2E8B57', offset:0, players:[{name:'Player 1',bench:3},{name:'Player 2',bench:3}]}); structural(); }
+  else if(a === 'delt'){ u.tracks = u.tracks.filter(t => t.id !== b.dataset.id); structural(); }
+  else if(a === 'defaults'){ sched().setup = clone(DEFAULT_SETUP); structural(); }
+  else if(a === 'up'){ const ps = track(b.dataset.id).players, k = +b.dataset.k; [ps[k-1], ps[k]] = [ps[k], ps[k-1]]; structural(); }
+  else if(a === 'sdup'){ const id = 's' + Date.now(); S.schedules.push({id, name:sched().name + ' (copy)', setup:clone(U()), others:clone(sched().others || [])}); S.activeId = id; structural(); }
+  else if(a === 'snew'){ const id = 's' + Date.now();
+    S.schedules.push({id, name:'New schedule', setup:{quarterMin:u.quarterMin, quarters:u.quarters, tracks:[{id:'t'+Date.now(), name:'Line 1', color:'#E3262B', offset:0, players:[{name:'Player 1',bench:3},{name:'Player 2',bench:3},{name:'Player 3',bench:3}]}]}});
+    S.activeId = id; structural(); }
+  else if(a === 'sdel'){ S.schedules = S.schedules.filter(x => x.id !== S.activeId); S.activeId = S.schedules[0].id; structural(); }
+  else if(a === 'stopread'){ if(readCtl) readCtl.abort(); }
+  else if(a === 'sqdel'){ delete S.squad[b.dataset.pid]; save(); renderSquad(); }
+  else if(a === 'exportdata') exportFile();
+  else if(a === 'savekey'){ const v = ($('api-key') || {}).value || ''; if(v.trim()){ setKey(v.trim()); useApiKey(); renderSetup(); } }
+  else if(a === 'delkey'){ setKey(''); useApiKey(); renderSetup(); }
+  else if(a === 'pickimport'){ const f = $('import-file'); if(f) f.click(); }
+  else if(a === 'pickteam'){ const f = $('team-files'); if(f) f.click(); }
+  else if(a === 'pickclean'){ const f = $('clean-files'); if(f) f.click(); }
+  else if(a === 'cpskip'){ cleanPending.splice(+b.dataset.i, 1); renderSetup(); }
+  else if(a === 'pickboard'){ const f = $('board-file'); if(f) f.click(); }
+  else if(a === 'pickph'){ const f = $(b.dataset.for); if(f) f.click(); }
+  else if(a === 'call') callSwap(b.dataset.id);
+  else if(a === 'cancel') cancelCall(b.dataset.id);
+  else if(a === 'reset'){
+    if(Date.now() - resetArm < 3000){ S.game = newGame(U()); resetArm = 0; save(); show(); }
+    else { resetArm = Date.now(); b.textContent = 'Tap again to reset'; setTimeout(() => { if(b.isConnected) b.textContent = 'Reset game'; }, 3000); }
+  }
+});
+function structural(){ ensureSquad(); S.game = newGame(U()); save(); show(); }
+
+function renderSquad(){
+  const el = $('squadlist'); if(!el) return;
+  const ids = Object.keys(S.squad).sort((a, b) => S.squad[a].name.localeCompare(S.squad[b].name));
+  el.innerHTML = ids.length
+    ? `<div class="squad">${ids.map(k => `<div class="sq"><button class="avbtn" data-act="pickph" data-for="sqph-${k}" aria-label="Change photo of ${esc(S.squad[k].name)}">${av(S.squad[k])}</button><input type="file" id="sqph-${k}" accept="image/*" class="vh" tabindex="-1" aria-hidden="true"><input type="text" id="sq-${k}-name" value="${esc(S.squad[k].name)}" aria-label="Name"><button data-act="sqdel" data-pid="${k}" aria-label="Remove ${esc(S.squad[k].name)} from the squad">×</button></div>`).join('')}</div>`
+    : '<p class="note">No one yet. Type a real name for a player above and they’re added here with their photo.</p>';
+}
+document.addEventListener('change', e => {
+  const id = e.target.id; let m;
+  if(m = id.match(/^p-(.+)-(\d+)-name$/)){ const t = track(m[1]), p = t && t.players[+m[2]]; if(!p) return;
+    couple(p); syncSquadPhotos(); e.target.value = p.name; save(); renderSetup(); renderGame(); update(); }
+  else if(m = id.match(/^o-(\d+)-name$/)){ const o = (sched().others || [])[+m[1]]; if(!o) return;
+    o.name = e.target.value.trim(); couple(o); syncSquadPhotos(); e.target.value = o.name; save(); renderSetup(); renderGame(); update(); }
+  else if(m = id.match(/^sq-(.+)-name$/)){ const sq = S.squad[m[1]], v = e.target.value.trim(); if(!sq || !v) return;
+    sq.name = v; allPlayers().forEach(q => { if(q.pid === m[1]) q.name = v; }); save(); renderSetup(); renderGame(); update(); }
+});
+
+function show(){
+  ensureGameFits();
+  ['game','plan','minutes','setup'].forEach(v => { $('v-'+v).hidden = S.view !== v; });
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.v === S.view));
+  renderGame();
+  if(S.view === 'plan') renderPlan();
+  if(S.view === 'minutes') renderMinutes();
+  if(S.view === 'setup') renderSetup();
+  update();
+}
+
+// The big header scrolls away with the page; the slim bar shows once it is out of view.
+if('IntersectionObserver' in window){
+  new IntersectionObserver(([e]) => { $('mini').hidden = e.isIntersecting; }, {threshold:0}).observe(document.querySelector('.clockrow'));
+}
+// Full screen where the browser supports it (not on iPhone).
+if(document.fullscreenEnabled && document.documentElement.requestFullscreen){
+  $('fsbtn').hidden = false;
+  document.addEventListener('fullscreenchange', () => { $('fsbtn').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; });
+}
+show();
+setInterval(tick, 250);
+setInterval(save, 5000);
+})();
+</script>
+
+<script>
+// Keep a copy on the phone so the app opens and runs with no connection.
+if('serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+</script>
+</body>
+</html>
