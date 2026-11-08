@@ -1,5 +1,5 @@
 // Offline support: serve the saved copy first, refresh it in the background when online.
-const CACHE = 'swap-clock-202610271942';
+const CACHE = 'swap-clock-202611081652';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {

@@ -194,6 +194,51 @@ input[type=color]{width:44px;height:40px;border:1px solid var(--line);border-rad
 .hdr{display:grid;grid-template-columns:20px 60px 1fr 60px 34px 34px;gap:6px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .hdr span:nth-child(1){text-align:center}
 @media (max-width:420px){.prow,.hdr{grid-template-columns:20px 50px 1fr 56px 32px 32px}.prow.orow{grid-template-columns:50px 1fr 104px 32px}.avbtn .av,.sq .av{width:50px;height:50px}.swap .who{flex-direction:column;align-items:flex-start;gap:4px}}
+.schedrow{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.schedrow .schedname{margin:0}
+.schedrow .btn-sub{padding:8px 12px}
+.ledit h2{margin-top:16px}
+.prow.lerow,.hdr.lerow{grid-template-columns:20px minmax(0,1fr) 60px minmax(0,110px) 34px 34px}
+.lerow select{min-width:0;width:100%}
+.trow.lenew{grid-template-columns:minmax(0,1fr) 130px}
+.prow.lerow.moving input[type=text]{text-decoration:line-through;opacity:.55}
+/* Player held back by a coach rule while her line moves on, one in a full-game spot, one who moved lines */
+.pl.heldpl{filter:grayscale(1);opacity:.5;border-style:dashed}
+.pl.away{border-color:var(--accent);color:var(--ink)}
+.pl.gonepl{opacity:.45;text-decoration:line-through}
+.altnote{margin:0;color:var(--muted);font-size:14px}
+.altnote b{color:var(--ink)}
+/* Full-game spot: who comes on, where she plays, who comes off */
+.ltag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:4px;padding:1px 5px;margin-left:4px;background:var(--tc,var(--line));color:var(--tink,var(--ink));vertical-align:1px}
+.btn.rulebtn{border-color:var(--due);color:var(--due)}
+.spotrow{padding-left:4px}
+.spotrow .who > div{display:flex;flex-direction:column}
+.placerow label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.rulewarn{margin:0;color:var(--due);font-weight:600;font-size:14px}
+.fixin{width:76px!important;padding:4px 6px!important;font-size:15px!important;text-align:right}
+.fixin.bad{border-color:var(--due)}
+/* On hold by a coach rule: greyed out, but the countdown and the reason stay readable */
+.card.held{background:var(--bg);border-color:var(--line);border-left-color:var(--tc)}
+.card.held .swap,.card.held .roster,.swap2.held .swap{filter:grayscale(1);opacity:.45}
+.card.held .state,.card.held .count{color:var(--muted)}
+.card.held .bar i{background:var(--muted)}
+.card.held .btn-swap{background:transparent;color:var(--muted);border-color:var(--line)}
+.next .heldnote{color:var(--muted);font-weight:600}
+.banner.rulebad{background:var(--due-soft);border-color:var(--due)}
+.rulepl{display:flex;flex-wrap:wrap;gap:6px}
+.pick{display:flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:14px;background:var(--bg)}
+.pick input{width:18px;height:18px;margin:0}
+.swap2{display:grid;gap:4px;padding-top:8px;border-top:1px dashed var(--line)}
+.swap2 .lbl b{color:var(--ink)}
+.swap2 .av{width:60px;height:60px}
+.swap2 .swap b{font-size:17px}
+.fullrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fullrow .who{display:flex;align-items:center;gap:10px;flex:1 1 160px}
+.fullrow .btn-sub{padding:8px 12px}
+.mdetail{display:grid;gap:10px;padding:10px 12px 12px;border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;margin-top:-6px;background:var(--surface)}
+.mdetail .log{max-height:none}
+@media (max-width:520px){.prow.lerow,.hdr.lerow{grid-template-columns:18px minmax(0,1fr) 56px 34px 34px}
+  .prow.lerow select{grid-column:2 / -1;grid-row:2}.prow.lerow{row-gap:4px;padding-bottom:6px;border-bottom:1px solid var(--line)}.hdr.lerow span:nth-child(4){display:none}}
 @media (max-width:420px){.clock{font-size:46px}.go{min-width:0;padding:12px 16px;font-size:19px}.count{font-size:34px}}
 </style>
 
@@ -248,10 +293,30 @@ const DEFAULT_SETUP = {
 };
 
 const clone = o => JSON.parse(JSON.stringify(o));
+// How many players of a line sit on the bench at the same time (1 unless set otherwise in Setup).
+// 0 is possible during a match: everyone in the line is needed on the field (for example in the keeper's place).
+function benchN(t){ const nb = t.onBench == null || t.onBench === '' ? 1 : Math.round(+t.onBench); return Math.max(0, Math.min(t.players.length - 1, isNaN(nb) ? 1 : nb)); }
+// The starting bench: numbers 1, 2… (as many as sit at once), all from the given time.
+// A player in a full-game player's spot (s.away) or injured isn't part of the line's bench; the spot player
+// also takes one of its bench places, so the number on the field stays the same.
+function startBench(t, s, at){
+  const away = Object.keys(s.away || {}).map(Number), inj = s.injured || [];
+  const ks = t.players.map((p, k) => k).filter(k => !away.includes(k) && !inj.includes(k) && !goneAt(s, k)).slice(0, Math.max(0, benchN(t) - away.length));
+  s.wait = [];
+  if(!ks.length){ s.benchIdx = null; return; }
+  s.benchIdx = ks[0]; s.benchSince = at; s.lastOut = ks[ks.length - 1];
+  s.wait = ks.slice(1).map(k => ({k, since:at}));
+  pickFront(t, s);
+}
+// Who is in a full-game player's spot from this line, if anyone.
+const awayAt = (s, k) => !!(s.away && s.away[k] != null);
+// A player who moved on to another line during the match ({at, to}): her minutes here stop then.
+const goneAt = (s, k) => !!(s.gone && s.gone[k] != null);
 function newGame(setup){
   const tr = {}, acc = {};
   setup.tracks.forEach(t => {
     tr[t.id] = {benchIdx:0, benchSince:0, extra:+t.offset||0, swaps:[], alert:{}, called:null};
+    startBench(t, tr[t.id], 0);
     acc[t.id] = t.players.map(() => 0);
   });
   return {phase:'pre', clockBase:0, runStart:null, quarter:1, tr, acc, history:[], log:[], speed:1};
@@ -264,11 +329,15 @@ function load(){
     } }catch(e){}
   return null;
 }
-function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} queueSync(); }
+function save(){
+  // At full time the match goes into the season log by itself, and stays up to date if you still correct something.
+  try{ if(S.game && S.game.phase === 'final' && !S.game.practice) recordMatch(); }catch(e){}
+  try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} queueSync(); }
 
 const LOADED = load(), FRESH = !LOADED;
 let S = LOADED || {schedules:[{id:'s1', name:'BRAX - LEOP', setup:clone(DEFAULT_SETUP)}], activeId:'s1', game:newGame(DEFAULT_SETUP), view:'game'};
 S.matches = S.matches || []; S.settings = Object.assign({confirm:true}, S.settings);
+S.removed = S.removed || []; // ids of deleted schedules, so a phone that was closed doesn't bring them back
 if(!S.game.log) S.game.log = [];
 const sched = () => S.schedules.find(x => x.id === S.activeId) || S.schedules[0];
 const G = () => S.game, U = () => sched().setup;
@@ -293,7 +362,18 @@ function ensureSquad(){
 function couple(p){
   ensureSquad();
   if(!isRealName(p.name)) return;
-  const nm = p.name.trim(), other = squadByName(nm, p.pid);
+  const nm = p.name.trim(), other = squadByName(nm, p.pid), cur = S.squad[p.pid];
+  // If this tile was linked to someone else who is a person in their own right (in other tiles too, or with
+  // a clean photo), a different name means the tile is a different player: move only this tile, and
+  // never rename or merge away the other person.
+  const shared = allPlayers().some(q => q !== p && q.pid === p.pid);
+  if(cur && isRealName(cur.name) && cur.name.trim().toLowerCase() !== nm.toLowerCase() && (shared || cur.clean)){
+    const own = photoOf(p) && photoOf(p) !== cur.photo ? photoOf(p) : '';
+    if(other){ p.pid = other; p.name = S.squad[other].name; p.photo = (S.squad[other].clean && S.squad[other].photo) || own || S.squad[other].photo || ''; addSig(S.squad[other], p.sig); }
+    else { p.pid = uid(); S.squad[p.pid] = {name:nm, photo:own, sigs:[]}; addSig(S.squad[p.pid], p.sig); p.photo = own; }
+    delete p.sig;
+    return;
+  }
   if(other){
     const old = p.pid;
     allPlayers().forEach(q => { if(q.pid === old){ q.pid = other; q.name = S.squad[other].name; } });
@@ -302,7 +382,8 @@ function couple(p){
     delete S.squad[old];
   } else {
     const prev = S.squad[p.pid];
-    S.squad[p.pid] = {name:nm, photo:(prev && prev.photo) || p.photo || '', sigs:(prev && prev.sigs) || []};
+    // Keep everything else about the person (clean photo mark, board reference picture).
+    S.squad[p.pid] = Object.assign({}, prev, {name:nm, photo:(prev && prev.photo) || p.photo || '', sigs:(prev && prev.sigs) || []});
     addSig(S.squad[p.pid], p.sig); delete p.sig;
     allPlayers().forEach(q => { if(q.pid === p.pid) q.name = nm; });
   }
@@ -351,23 +432,91 @@ const total = () => qLen() * Math.max(1, +U().quarters || 4);
 function now(){ const g = G(); return g.clockBase + (g.runStart ? (Date.now() - g.runStart) / 1000 * (g.speed || 1) : 0); }
 const qEnd = () => G().quarter * qLen();
 function fmt(s){ s = Math.max(0, Math.floor(s)); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
-const benchMin = p => Math.max(0.25, +p.bench || 0);
+// A function declaration, so it also works while the page is still loading (a fresh game is set up
+// before this line runs, and a line with two on the bench needs it then).
+function benchMin(p){ return Math.max(0.25, +p.bench || 0); }
 
 function track(id){ return U().tracks.find(t => t.id === id); }
 // The person filling a rotation spot right now: a reserve covering an injury, or the scheduled player.
 function slot(t, k){ const s = G().tr[t.id], sub = s.subs && s.subs[k]; return sub ? {name:sub.name, photo:sub.photo, bench:t.players[k].bench, sub:true} : t.players[k]; }
+// Everyone on a line's bench right now. benchIdx/benchSince is the one who comes on next; with two or
+// more on the bench at once, the others wait in s.wait, each with the time they went off.
+function benchList(s){ return s.benchIdx == null ? [] : [{k:s.benchIdx, since:s.benchSince}].concat(s.wait || []); }
+function onBench(s, k){ return benchList(s).some(e => e.k === k); }
+function sinceOf(s, k){ const e = benchList(s).find(x => x.k === k); return e ? e.since : null; }
+// When a bench player is due back on: her own bench minutes from when she went off, or when her card ends.
+function dueAt(t, s, e){
+  const base = e.since + benchMin(t.players[e.k]) * 60, c = s.cards && s.cards[e.k];
+  return c ? (c.until == null ? Infinity : Math.max(base, c.until)) : base;
+}
+// The bench player due back first comes on next (ties: whoever has sat longest, then swap order).
+function pickFront(t, s){
+  const list = benchList(s);
+  if(!list.length){ s.benchIdx = null; s.wait = []; return; }
+  const ord = k => (k - (s.lastOut != null ? s.lastOut : 0) + t.players.length * 2) % t.players.length;
+  list.sort((a, b) => dueAt(t, s, a) - dueAt(t, s, b) || a.since - b.since || ord(a.k) - ord(b.k));
+  s.benchIdx = list[0].k; s.benchSince = list[0].since; s.wait = list.slice(1);
+}
+// Take one player off the bench list (she came on, got hurt or was sent off) and pick who is next.
+function dropBench(t, s, k){
+  const rest = benchList(s).filter(e => e.k !== k);
+  if(!rest.length){ s.benchIdx = null; s.wait = []; return; }
+  s.benchIdx = rest[0].k; s.benchSince = rest[0].since; s.wait = rest.slice(1); pickFront(t, s);
+}
 // A carded bench player can't come on until the card is over; a red card on the bench stops the line.
 function halted(s){ return s.benchIdx == null || !!(s.cards && s.cards[s.benchIdx] && s.cards[s.benchIdx].until == null); }
-function due(t){
-  const s = G().tr[t.id]; if(halted(s)) return Infinity;
-  const base = s.benchSince + benchMin(t.players[s.benchIdx]) * 60 + (s.extra || 0), c = s.cards && s.cards[s.benchIdx];
-  return c ? Math.max(base, c.until) : base;
+// Field players of a line in the order they come off: the next one after whoever went off last, skipping
+// anyone on the bench, off with a card, injured or in a full-game player's spot.
+function rotOuts(t, s){
+  const n = t.players.length, start = s.lastOut != null ? s.lastOut : s.benchIdx, inj = s.injured || [], out = [];
+  for(let j = 1; j <= n; j++){ const o = (start + j) % n;
+    if(onBench(s, o) || (s.cards && s.cards[o]) || inj.includes(o) || awayAt(s, o) || goneAt(s, o)) continue; out.push(o); }
+  return out;
 }
-// The player coming off is the next one in order who isn't off the field with a card.
+// The swap a line makes next, and when. Normally the bench player due back first comes on for the next
+// player in the order. When that would break a coach rule the line moves on with the next swap that
+// doesn't: another bench player comes on first (skipIn), or the next player in the order comes off
+// instead (skipOut). Only when no swap is allowed is the whole line on hold.
+function swapPlan(t, s, field){
+  if(s.benchIdx == null) return null;
+  const when = e => { const c = s.cards && s.cards[e.k], b = e.since + benchMin(t.players[e.k]) * 60 + (s.extra || 0);
+    return c ? (c.until == null ? Infinity : Math.max(b, c.until)) : b; };
+  const ins = benchList(s).filter(e => isFinite(when(e))), outs = rotOuts(t, s);
+  if(!ins.length || !outs.length) return null;
+  const base = {i:ins[0].k, o:outs[0], at:when(ins[0])};
+  if(!rules().length) return base;
+  field = field || onFieldNow();
+  const why = swapBreaksAt(t, s, base.i, base.o, field); if(!why.length) return base;
+  const ok = (i, o) => !swapBreaksAt(t, s, i, o, field).length;
+  for(const e of ins.slice(1)) if(ok(e.k, outs[0])) return {i:e.k, o:outs[0], at:when(e), skipIn:base.i, why};
+  for(const e of ins) for(const o of outs.slice(1)) if(ok(e.k, o)) return {i:e.k, o, at:when(e), skipIn:e.k !== base.i ? base.i : null, skipOut:base.o, why};
+  return Object.assign(base, {held:true, why});
+}
+function due(t){ const s = G().tr[t.id]; if(halted(s)) return Infinity; const p = swapPlan(t, s); return p ? p.at : Infinity; }
+// Who comes on and who comes off next. A swap you called stays the one you called, even if the
+// coach-rule picture changes while the players get ready.
 function inOut(t){
-  const s = G().tr[t.id], n = t.players.length; let o = (s.benchIdx + 1) % n;
-  for(let j = 0; j < n && s.cards && s.cards[o] && o !== s.benchIdx; j++) o = (o + 1) % n;
-  return {i:s.benchIdx, o};
+  const s = G().tr[t.id];
+  if(s.called != null && s.callIn != null && onBench(s, s.callIn) && rotOuts(t, s).includes(s.callOut)) return {i:s.callIn, o:s.callOut};
+  const p = swapPlan(t, s);
+  return p ? {i:p.i, o:p.o} : {i:s.benchIdx, o:s.benchIdx};
+}
+// One swap on a line's state: the player coming on leaves the bench, the one coming off sits down.
+function applySwap(t, s, i, o, at){
+  const rest = benchList(s).filter(e => e.k !== i).concat({k:o, since:at});
+  s.lastOut = o; s.benchIdx = rest[0].k; s.benchSince = rest[0].since; s.wait = rest.slice(1); pickFront(t, s);
+}
+// The swap after the next one, on a line with more than one player on the bench: play the next swap
+// forward on a copy, then see who comes on and off after that, and when.
+function swapAfter(t){
+  const real = G().tr[t.id]; if(halted(real) || !(real.wait || []).length) return null;
+  const io = inOut(t); if(io.i == null || io.i === io.o) return null;
+  const field = onFieldNow(), s = clone(real), at = Math.max(due(t), Math.min(now(), total()));
+  const f2 = new Set(field); f2.delete(pidAt(t, s, io.o)); f2.add(pidAt(t, s, io.i));
+  applySwap(t, s, io.i, io.o, at); s.extra = 0;
+  if(halted(s)) return null;
+  const next = swapPlan(t, s, f2); if(!next || next.i === next.o) return null;
+  return Object.assign(next, {s});
 }
 function qtime(t){ const q = Math.min(Math.floor(t / qLen()) + 1, +U().quarters || 4); return `Q${q} ${fmt(t - (q - 1) * qLen())}`; }
 function logEv(text){ const g = G(); g.log = g.log || []; g.log.push({t:Math.min(now(), total()), text}); if(g.log.length > 400) g.log.shift(); }
@@ -387,9 +536,14 @@ function beep(n, f){
 let hapticEl = null;
 function hapticTick(){
   try{
-    if(!hapticEl){ hapticEl = document.createElement('label'); hapticEl.className = 'vh'; hapticEl.setAttribute('aria-hidden', 'true');
+    // Pinned to the top of the screen: Safari scrolls to a switch when it's toggled, and at the end of the page
+    // that dragged the view down on every alert.
+    if(!hapticEl){ hapticEl = document.createElement('label'); hapticEl.className = 'vh'; hapticEl.style.cssText = 'position:fixed;top:0;left:0'; hapticEl.setAttribute('aria-hidden', 'true');
       const i = document.createElement('input'); i.type = 'checkbox'; i.setAttribute('switch', ''); i.tabIndex = -1; hapticEl.appendChild(i); document.body.appendChild(hapticEl); }
+    const x = window.scrollX, y = window.scrollY, f = document.activeElement;
     hapticEl.click();
+    if(window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y);
+    if(f && f !== document.activeElement && f.focus) f.focus({preventScroll:true});
   }catch(e){}
 }
 function canVibrate(){ return typeof navigator.vibrate === 'function'; }
@@ -421,25 +575,33 @@ function adj(d){
 }
 function swap(id){
   const t = track(id), g = G(), s = g.tr[id], at = Math.min(now(), total());
-  if(halted(s) || (s.cards && s.cards[s.benchIdx])) return;
-  const {i, o} = inOut(t); if(i === o) return;
+  if(halted(s)) return;
+  const {i, o} = inOut(t); if(i == null || i === o || (s.cards && s.cards[i])) return;
   g.history.push({id, s:clone(s), acc:clone(g.acc[id])});
   if(g.history.length > 40) g.history.shift();
-  g.acc[id][i] += at - s.benchSince;
+  g.acc[id][i] += at - sinceOf(s, i);
   const wait = s.called != null ? at - s.called : 0;
   s.swaps.push({t:at, in:i, out:o, wait});
   logEv(`${t.name}: ${slot(t, i).name} on for ${slot(t, o).name}${s.called != null ? ` (took ${fmt(wait)} after the call)` : ''}`);
-  s.benchIdx = o; s.benchSince = at; s.extra = 0; s.alert = {}; s.called = null;
+  applySwap(t, s, i, o, at);
+  s.extra = 0; s.alert = {}; s.called = null; delete s.callIn; delete s.callOut;
   ensureAudio(); save(); renderGame(); update();
 }
-// Calling a swap stops that line's timer until the players have actually changed.
-function callSwap(id){ const s = G().tr[id]; if(halted(s)) return; s.called = Math.min(now(), total()); ensureAudio(); save(); renderGame(); update(); }
-function cancelCall(id){ G().tr[id].called = null; save(); renderGame(); update(); }
+// Calling a swap stops that line's timer until the players have actually changed, and fixes who swaps.
+function callSwap(id){ const t = track(id), s = G().tr[id]; if(halted(s)) return; const io = inOut(t);
+  s.called = Math.min(now(), total()); s.callIn = io.i; s.callOut = io.o; ensureAudio(); save(); renderGame(); update(); }
+function cancelCall(id){ const s = G().tr[id]; s.called = null; delete s.callIn; delete s.callOut; save(); renderGame(); update(); }
 function undo(){
   const g = G(), h = g.history.pop(); if(!h) return;
-  if(h.multi){ h.multi.forEach(x => { g.tr[x.id] = x.s; g.acc[x.id] = x.acc; }); g.resetAt = h.resetAt; }
+  if(h.keep){ g.keep = h.before; g.past = h.past;
+    if(h.tr){ g.tr = h.tr; g.acc = h.acc; }
+    if(h.tracks){ U().tracks = h.tracks; sched().others = h.others; if(!h.hadOriginal) delete sched().original; } }
+  else if(h.lines){ U().tracks = h.tracks; g.tr = h.tr; g.acc = h.acc; g.past = h.past; g.oldSwaps = h.oldSwaps; g.fullEnd = h.fullEnd;
+    if(h.fullStart) g.fullStart = h.fullStart; if(h.keepWas) g.keep = h.keepWas; if(h.othersWas) sched().others = h.othersWas;
+    if(!h.hadOriginal) delete sched().original; }
+  else if(h.multi){ h.multi.forEach(x => { g.tr[x.id] = x.s; g.acc[x.id] = x.acc; }); g.resetAt = h.resetAt; }
   else { g.tr[h.id] = h.s; g.acc[h.id] = h.acc; }
-  logEv(`Undid the last ${h.multi ? 'line-up reset' : (h.label || 'swap')}`);
+  logEv(`Undid the last ${h.lines ? 'line change' : h.multi ? 'line-up reset' : (h.label || 'swap')}`);
   save(); renderGame(); update();
 }
 // Quarter break: every line goes back to its starting line-up (player 1 on the bench), timers restart now.
@@ -449,11 +611,24 @@ function resetLines(){
   U().tracks.forEach(t => {
     const s = g.tr[t.id];
     if(s.benchIdx == null) return; // a line short through injury keeps playing as it is
-    g.acc[t.id][s.benchIdx] += Math.max(0, at - s.benchSince);
-    Object.assign(s, {benchIdx:0, benchSince:at, extra:+t.offset || 0, alert:{}, called:null});
+    benchList(s).forEach(e => { g.acc[t.id][e.k] += Math.max(0, at - e.since); });
+    Object.assign(s, {extra:+t.offset || 0, alert:{}, called:null});
+    startBench(t, s, at);
   });
   g.resetAt = g.quarter;
   logEv('All lines reset to the starting line-up');
+  save(); renderGame(); update();
+}
+// One line back to its starting line-up (number 1 on the bench, timer from now); the other lines carry on.
+function resetLine(id){
+  const g = G(), t = track(id), s = g.tr[id], at = Math.min(now(), total());
+  if(!t || !s || s.benchIdx == null) return;
+  g.history.push({id, s:clone(s), acc:clone(g.acc[id]), label:'line reset'});
+  if(g.history.length > 40) g.history.shift();
+  benchList(s).forEach(e => { g.acc[id][e.k] += Math.max(0, at - e.since); });
+  Object.assign(s, {extra:0, alert:{}, called:null});
+  startBench(t, s, at);
+  logEv(`${t.name} reset to its starting line-up`);
   save(); renderGame(); update();
 }
 
@@ -470,8 +645,9 @@ function tick(){
   U().tracks.forEach(t => { const s = g.tr[t.id];
     Object.keys(s.cards || {}).forEach(k => { const c = s.cards[k]; k = +k;
       if(c.until == null || tc < c.until) return;
-      if(k !== s.benchIdx) g.acc[t.id][k] += c.until - c.at;
+      if(!onBench(s, k)) g.acc[t.id][k] += c.until - c.at;
       delete s.cards[k]; back = true;
+      if(s.called == null && s.benchIdx != null) pickFront(t, s);
       logEv(`${t.name}: ${slot(t, k).name} back on after a ${c.type === 'green' ? 'green' : 'yellow'} card`);
     }); });
   if(back){ beep(2, 660); buzz([200,100,200]); save(); renderGame(); }
@@ -479,7 +655,8 @@ function tick(){
     const t0 = now();
     U().tracks.forEach(t => {
       const s = g.tr[t.id], rem = due(t) - t0;
-      if(s.called != null || !isFinite(rem)) return;
+      // No beeps for a line on hold: once it's allowed again and due, the alert goes off then.
+      if(s.called != null || !isFinite(rem) || heldBy(t).length) return;
       if(rem <= SOON && rem > 0 && !s.alert.soon){ s.alert.soon = 1; beep(1, 880); buzz(200); }
       if(rem <= 0 && !s.alert.due){ s.alert.due = 1; s.alert.re = Date.now(); beep(3, 1040); buzz([300,120,300,120,300]); }
       // Keep nagging every 15 s (up to 4 times) while a swap is overdue and not yet called.
@@ -496,35 +673,68 @@ function inkFor(hex){ const h = hex.replace('#',''); const r=parseInt(h.substr(0
 const tvars = t => `--tc:${t.color};--tink:${inkFor(t.color)}`;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+// When the cards redraw or change order, the line you were looking at stays where it was on screen.
+// At the top of the page nothing is pinned, so the most urgent line simply shows first.
+function anchorCard(){
+  if(S.view !== 'game' || window.scrollY < 40) return null;
+  const mini = $('mini'), top = mini && !mini.hidden ? mini.offsetHeight : 0;
+  const c = [...document.querySelectorAll('[data-card]')].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+    .find(el => el.getBoundingClientRect().bottom > top + 10);
+  return c ? {id:c.dataset.card, y:c.getBoundingClientRect().top} : null;
+}
+function restoreCard(a){ if(!a) return; const c = document.querySelector(`[data-card="${a.id}"]`); if(c){ const d = c.getBoundingClientRect().top - a.y; if(Math.abs(d) > 1) window.scrollBy(0, d); } }
+let cardOrder = '';
 function renderGame(){
+  const pin = anchorCard(); cardOrder = '';
+  try{ drawGame(); } finally { update(); restoreCard(pin); }
+}
+function drawGame(){
   const g = G(), last = g.history[g.history.length-1];
   let banner = '';
   if(g.phase === 'break') banner = g.resetAt === g.quarter
     ? `<div class="banner">End of Q${g.quarter}. All lines are back to the starting line-up: number 1 of each line on the bench, timers start with Q${g.quarter+1}.</div>`
     : `<div class="banner">End of Q${g.quarter}. Lines marked “do at break” are due in the first ${BREAK_PULL/60} min of Q${g.quarter+1}, so swap them now while play is stopped. Or start Q${g.quarter+1} from the starting line-up:
         <div class="row" style="margin-top:10px"><button class="btn primary" data-act="resetlines">Reset to starting line-up</button></div></div>`;
-  if(g.phase === 'final') banner = `<div class="banner">Full time. ${g.practice ? 'Practice run finished.' : 'Open the Minutes tab to send the report and add this match to the season log.'}</div>`;
+  if(g.phase === 'break') banner = banner.replace(/<\/div>$/, `<div class="row" style="margin-top:10px"><button class="btn" data-act="leopen">Change lines for Q${g.quarter + 1}</button></div></div>`);
+  if(g.phase === 'final') banner =`<div class="banner">Full time. ${g.practice ? 'Practice run finished.' : 'Open the Minutes tab to send the report and add this match to the season log.'}</div>`;
   if(g.phase === 'pre') banner = `<div class="banner">Ready for push-back. Tap <b>Start</b> when the umpire starts the clock. Bench timers run on the game clock, so pausing for a stoppage pauses them too. When you give the swap command, tap <b>Call swap</b>: that line’s timer stops until you tap <b>Swap done</b>.
       <div class="row" style="margin-top:10px"><button class="btn" data-act="practice">Practice run at 10× speed</button></div></div>`;
   if(g.practice) banner = `<div class="banner practice">Practice run at ${g.speed}× speed. A 17:30 quarter takes under 2 minutes. Nothing here goes into the season log.
       <div class="row" style="margin-top:10px"><button class="btn" data-act="endpractice">End practice</button></div></div>` + (g.phase === 'break' || g.phase === 'final' ? banner : '');
   const cards = U().tracks.map(t => {
     const s = g.tr[t.id], inj = s.injured || [], subs = s.subs || {}, crd = s.cards || {}, stop = halted(s);
-    const io = stop ? null : inOut(t), benchCard = !stop && crd[s.benchIdx];
-    const roster = t.players.map((p, k) => { const sp = slot(t, k), c = crd[k];
-      return `<span class="pl ${k===s.benchIdx?'bench':''} ${inj.includes(k)||c?'inj':''}"><span class="o">${k+1}</span>${photoOf(sp)?`<img class="av sm" src="${photoOf(sp)}" alt="">`:''}${esc(sp.name)} · ${+p.bench}′${k===s.benchIdx?' · bench':''}${inj.includes(k)?' · injured':''}${c?` · ${c.type==='red'?'red':c.type==='green'?'green':'yellow'} card`:''}</span>`; }).join('');
+    const io = stop ? null : inOut(t), benchCard = !stop && crd[io.i];
+    // When a coach rule blocks one player, the line moves on without her: she's greyed out in the roster.
+    const plan = stop || s.called != null ? null : swapPlan(t, s), skipIn = plan && !plan.held ? plan.skipIn : null, skipOut = plan && !plan.held ? plan.skipOut : null;
+    const spotOf = k => esc(((sched().others || []).find(o => o.pid === s.away[k]) || {name:'the keeper'}).name);
+    const roster = t.players.map((p, k) => { const sp = slot(t, k), c = crd[k], aw = awayAt(s, k), hk = k === skipIn, gn = goneAt(s, k);
+      if(gn) return `<span class="pl gonepl"><span class="o">${k+1}</span>${esc(sp.name)} · moved to ${esc((track(s.gone[k].to) || {name:'another line'}).name)}</span>`;
+      return `<span class="pl ${onBench(s, k)?'bench':''} ${inj.includes(k)||c?'inj':''} ${aw?'away':''} ${hk?'heldpl':''}"><span class="o">${k+1}</span>${photoOf(sp)?`<img class="av sm" src="${photoOf(sp)}" alt="">`:''}${esc(sp.name)} · ${+p.bench}′${onBench(s, k)?' · bench':''}${hk?' · on hold':''}${k === skipOut?' · stays on':''}${aw?` · in ${spotOf(k)}’s spot`:''}${(s.joined || {})[k] != null && !onBench(s, k) ? ' · joined' : ''}${inj.includes(k)?' · injured':''}${c?` · ${c.type==='red'?'red':c.type==='green'?'green':'yellow'} card`:''}</span>`; }).join('');
+    const awayNames = t.players.map((p, k) => awayAt(s, k) ? `${esc(slot(t, k).name)} is in ${spotOf(k)}’s spot` : '').filter(Boolean);
     const outs = inj.map(k => `<div class="injrow">${esc(slot(t, k).name)} is injured <button class="btn-sub" data-act="back" data-id="${t.id}" data-k="${k}">Back on</button></div>`)
       .concat(Object.keys(subs).map(k => `<div class="injrow">${esc(subs[k].name)} is in for ${esc(t.players[k].name)} <button class="btn-sub" data-act="back" data-id="${t.id}" data-k="${k}">${esc(t.players[k].name)} is back</button></div>`))
       .concat(Object.keys(crd).map(k => { const c = crd[k];
         return `<div class="cardrow"><span class="cchip ${c.type === 'red' ? 'red' : c.type === 'green' ? 'green' : 'yellow'}"></span>${esc(slot(t, +k).name)} ${c.until == null ? 'is sent off for the rest of the game' : `is off with a card · back in <b class="num" data-until="${c.until}">${fmt(c.until - now())}</b>`}</div>`; })).join('');
     let mid;
-    if(stop) mid = `<p class="note">${s.benchIdx == null ? 'No one on this line’s bench, so everyone left plays on. The rotation restarts when the injured player is back, or bring in a reserve.' : 'The bench player is sent off, so the rest of this line plays on without swaps.'}</p>`;
-    else mid = `<div class="swap"><div class="in"><span class="lbl">In</span><div class="who">${av(slot(t, io.i))}<b>${esc(slot(t, io.i).name)}</b></div></div><div class="out"><span class="lbl">Out</span><div class="who">${av(slot(t, io.o))}<b>${esc(slot(t, io.o).name)}</b></div></div></div>`
-      + (benchCard ? `<p class="note">${esc(slot(t, s.benchIdx).name)} can’t come on until the card is over.</p>` : '');
+    if(stop) mid = `<p class="note">${s.benchIdx == null
+      ? (awayNames.length && !inj.length ? `No one on this line’s bench (${awayNames.join(', ')}), so everyone else plays on. Swaps start again when she comes back to the bench.`
+        : inj.length ? 'No one on this line’s bench, so everyone left plays on. The rotation restarts when the injured player is back, or bring in a reserve.'
+        : (() => { const by = (sched().others || []).find(o => ((g.keep || {})[o.pid] || {}).toLine === t.id && g.keep[o.pid].off != null);
+            return `Everyone in this line is on the field right now, so no swaps for the moment. They start again when ${by ? `${esc(by.name)} is back on` : 'someone goes to the bench'}.`; })())
+      : 'The bench player is sent off, so the rest of this line plays on without swaps.'}</p>`;
+    else {
+      // With two on the bench, the swap after this one gets its own faces too, with its own countdown.
+      const nx = swapAfter(t), pair = (i, o) => `<div class="swap"><div class="in"><span class="lbl">In</span><div class="who">${av(slot(t, i))}<b>${esc(slot(t, i).name)}</b></div></div><div class="out"><span class="lbl">Out</span><div class="who">${av(slot(t, o))}<b>${esc(slot(t, o).name)}</b></div></div></div>`;
+      mid = pair(io.i, io.o) + (plan && plan.held ? ruleWarn(plan.why) : altNote(t, plan))
+        + (benchCard ? `<p class="note">${esc(slot(t, io.i).name)} can’t come on until the card is over.</p>` : '')
+        + (nx ? `<div class="swap2${nx.held ? ' held' : ''}"><span class="lbl">Then${isFinite(nx.at) ? ` · in <b class="num" data-until="${nx.at}">${fmt(nx.at - now())}</b>` : ''}</span>${pair(nx.i, nx.o)}${nx.held ? ruleWarn(nx.why) : altNote(t, nx)}</div>`
+          : (s.wait || []).length ? `<p class="note">Also on the bench: ${s.wait.map(e => `<b>${esc(slot(t, e.k).name)}</b>`).join(' · ')}</p>` : '');
+    }
     const sub = [];
     if(!stop && s.called == null) sub.push(`<button class="btn-sub" data-act="swap" data-id="${t.id}">Already swapped</button>`);
     if(!stop && s.called != null) sub.push(`<button class="btn-sub" data-act="cancel" data-id="${t.id}">Cancel call</button>`);
     sub.push(`<button class="btn-sub" data-act="injopen" data-id="${t.id}">Injury</button>`, `<button class="btn-sub" data-act="cardopen" data-id="${t.id}">Card</button>`);
+    if(!stop && g.phase !== 'pre') sub.push(`<button class="btn-sub" data-act="resetline" data-id="${t.id}">Reset line</button>`);
     const main = stop ? '' : s.called != null
       ? `<button class="btn-swap" data-act="swap" data-id="${t.id}">Swap done</button>`
       : `<button class="btn-swap" data-act="call" data-id="${t.id}" data-f="btn">Call swap</button>`;
@@ -540,11 +750,605 @@ function renderGame(){
       <div class="subrow">${sub.join('')}</div>
     </article>`;
   }).join('');
-  const undoTxt = last ? (last.multi ? 'Undo line-up reset' : `Undo last ${last.label || 'swap'} (${esc(track(last.id)?.name || '')})`) : '';
+  const undoTxt = last ? (last.keep ? 'Undo full-game swap' : last.lines ? 'Undo line change' : last.multi ? 'Undo line-up reset' : `Undo last ${last.label || 'swap'} (${esc(track(last.id)?.name || '')})`) : '';
   const res = (sched().others || []).filter(o => isRealName(o.name)).map(o => o.name);
   const names = [...new Set(res.concat(Object.values(S.squad || {}).map(x => x.name)))];
-  $('v-game').innerHTML = `<p class="schedname">Schedule: <b>${esc(sched().name)}</b></p>` + banner + (last ? `<div class="undo"><button data-act="undo">${undoTxt}</button></div>` : '')
-    + `<div class="cards">${cards}</div><datalist id="squadnames">${names.map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+  const list = `<datalist id="squadnames">${names.map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+  if(lineEdit){ $('v-game').innerHTML = `<p class="schedname">Schedule: <b>${esc(sched().name)}</b></p>` + lineEditPanel() + list; showMoves(); return; }
+  const bad = g.phase === 'final' ? [] : broken(onFieldNow());
+  if(bad.length) banner += `<div class="banner rulebad">Coach rule broken right now: ${bad.map(r => esc(ruleText(r))).join('; ')}.</div>`;
+  $('v-game').innerHTML = `<div class="schedrow"><p class="schedname">Schedule: <b>${esc(sched().name)}</b></p>${g.phase === 'final' ? '' : '<button class="btn-sub" data-act="leopen">Change lines</button>'}</div>`
+    + banner + (last ? `<div class="undo"><button data-act="undo">${undoTxt}</button></div>` : '')
+    + `<div class="cards">${cards}${fullCard()}</div>` + list;
+}
+
+// ---------- changing lines during a match ----------
+// Coaches often reshuffle the lines for the last quarter. The editor works on a draft; applying it keeps
+// everyone's minutes so far, and each line that changed restarts its rotation from its new number 1.
+let lineEdit = null, lineMsg = '';
+const bareLines = tracks => tracks.map(t => ({id:t.id, name:t.name, color:t.color, offset:+t.offset || 0, onBench:benchN(t), players:t.players.map(p => ({pid:p.pid, name:p.name, bench:+p.bench}))}));
+function photoFor(pid){
+  const sq = S.squad[pid], own = allPlayers().find(q => q.pid === pid && q.photo && q.photo !== '@squad');
+  return (sq && sq.clean && sq.photo) || (own && own.photo) || (sq && sq.photo) || '';
+}
+// Colours a new line can take (one entry per colour).
+const PALETTE = [['Red','#E3262B'], ['Pink','#E8408F'], ['Yellow','#F2CE00'], ['Blue','#155489'], ['Green','#2E8B57'], ['Orange','#F07D00'], ['Purple','#7B3FB5'], ['Black','#2B2B2B'], ['White','#A9B4BE']];
+function addDraftLine(){
+  const free = PALETTE.find(([n, hex]) => !lineEdit.some(l => l.color.toLowerCase() === hex.toLowerCase())) || PALETTE[0];
+  lineEdit.push({id:'t' + Date.now(), name:free[0], color:free[1], offset:0, fresh:true, players:[{pid:null, name:'', bench:2}, {pid:null, name:'', bench:2}]});
+}
+function openLineEdit(){
+  ensureSquad();
+  const g = G();
+  // Players who moved on to another line during the match aren't part of their old line any more.
+  lineEdit = bareLines(U().tracks).map(l => { const s = g.tr[l.id]; l.players = l.players.filter((p, k) => !(s && goneAt(s, k))); return l; });
+  // How many each line has on the field now (someone in a full-game spot or injured still holds a bench place).
+  lineEdit.forEach(l => { const s = g.tr[l.id];
+    const benchNow = g.phase === 'pre' || !s ? l.onBench : benchList(s).length + Object.keys(s.away || {}).length + (s.injured || []).length;
+    l.field = l.players.length - benchNow; l.orig = l.players.map(p => p.pid); });
+  lineEdit.toFull = []; lineEdit.origAll = lineEdit.flatMap(l => l.players.map(p => ({pid:p.pid, name:p.name})));
+  lineMsg = ''; cardUI = null; injUI = null;
+}
+// Typing a player into a second line moves her there: the entry typed last wins, and she comes out of
+// the line she was in. Returns the draft entries that will be dropped, with the line each one moves to.
+function draftMoves(L){
+  const by = {}, drop = new Map();
+  L.forEach(l => l.players.forEach(p => { if(p.pid && String(p.name || '').trim()) (by[p.pid] = by[p.pid] || []).push({l, p}); }));
+  Object.values(by).forEach(a => { if(a.length < 2) return;
+    const home = U().tracks.find(t => t.players.some(q => q.pid === a[0].p.pid)), atHome = x => home && x.l.id === home.id ? 1 : 0;
+    a.sort((x, y) => (y.p.typed || 0) - (x.p.typed || 0) || atHome(x) - atHome(y));
+    a.slice(1).forEach(x => drop.set(x.p, a[0].l.name)); });
+  return drop;
+}
+// Strike through the rows that will move and say so, without redrawing the editor under your finger.
+function showMoves(){
+  if(!lineEdit) return;
+  const drop = draftMoves(lineEdit), msgs = [];
+  lineEdit.forEach((l, li) => { l.players.forEach((p, k) => { const f = $(`le-${li}-${k}-name`), row = f && f.closest('.prow');
+      if(row) row.classList.toggle('moving', drop.has(p));
+      if(drop.has(p)) msgs.push(`${p.name} moves from ${l.name} to ${drop.get(p)}`); });
+    // The bench number follows straight away, so you see what the line will look like before applying.
+    const n = l.players.filter(p => !drop.has(p)).length, nb = $(`le-${li}-nb`), note = $(`le-${li}-field`);
+    if(nb && !l.nbSet) nb.value = draftBench(l, n);
+    if(note) note.textContent = `${n - draftBench(l, n)} on the field`; });
+  // A line left with one player is removed and she goes to the reserves; so does anyone taken out of all lines.
+  const named = l => l.players.filter(p => !drop.has(p) && String(p.name || '').trim());
+  lineEdit.filter(l => named(l).length === 1).forEach(l => msgs.push(`${named(l)[0].name} goes to the reserves and ${l.name} is removed (a line needs two players)`));
+  const inDraft = new Set(lineEdit.flatMap(l => named(l).map(p => p.pid))), full = new Set((lineEdit.toFull || []).map(x => x.pid));
+  const removed = (lineEdit.origAll || []).filter(x => !inDraft.has(x.pid) && !full.has(x.pid));
+  if(removed.length) msgs.push(`${removed.map(x => x.name).join(', ')} to the reserves`);
+  lineMsg = msgs.length ? msgs.join(' · ') + ' when you apply.' : '';
+  const el = $('lemsg'); if(el) el.textContent = lineMsg;
+}
+// How many of a draft line sit on the bench at once. Unless set by hand, the number on the field stays
+// the same when players leave or join: 5 players with 2 on the bench who lose one keep 3 on the field
+// and drop to 1 on the bench.
+function draftBench(l, n){
+  n = n == null ? l.players.length : n;
+  // A full-game player who joins the line brings her place on the field with her; a player sent to
+  // Full game takes hers along (she stays on the field, outside the line); a line that's removed hands
+  // its places on the field to its players who move on to other lines.
+  const fg = new Set(fullPlayers().map(o => o.pid));
+  const joinFG = l.players.filter(p => p.pid && fg.has(p.pid) && !(l.orig || []).includes(p.pid)).length;
+  const leftFG = ((lineEdit && lineEdit.toFull) || []).filter(x => x.from === l.id).length;
+  const carry = (lineEdit && l.field != null ? fieldCarry(lineEdit)[l.id] : 0) || 0;
+  const want = l.nbSet || l.field == null ? (l.onBench == null ? 1 : +l.onBench) : n - (l.field + joinFG - leftFG + carry);
+  return Math.max(0, Math.min(Math.max(0, n - 1), Math.round(want)));
+}
+// Lines that will be removed (one player or none left) hand their places on the field to their players who
+// moved on to other lines, players who are on the field now first. Returns line id → places gained.
+function fieldCarry(L){
+  const drop = draftMoves(L), named = l => l.players.filter(p => !drop.has(p) && String(p.name || '').trim()), field = onFieldNow(), out = {};
+  L.forEach(y => {
+    if(named(y).length > 1 || y.field == null) return;
+    let places = y.field;
+    (y.orig || []).map(pid => ({pid, to:L.find(x => x !== y && named(x).some(p => p.pid === pid))})).filter(m => m.to)
+      .sort((a, b) => (field.has(b.pid) ? 1 : 0) - (field.has(a.pid) ? 1 : 0))
+      .forEach(m => { if(places > 0){ out[m.to.id] = (out[m.to.id] || 0) + 1; places--; } });
+  });
+  return out;
+}
+function lineEditPanel(){
+  const L = lineEdit, sc = sched(), drop = draftMoves(L), count = l => l.players.filter(p => !drop.has(p)).length;
+  return `<section class="ledit">
+    <h2>Change lines</h2>
+    <p class="lead">Add, remove or move players, or change the order and bench minutes. Lines keep going: everyone stays where she is (bench or field) with her minutes, new players join from now, and the line only adjusts its bench where it has to. To take a player out of the rotation, set her line to <b>Full game</b> (she plays on without swapping) or <b>Reserves</b>.</p>
+    ${L.map((l, li) => `<div class="tset" style="${tvars(l)}">
+      ${l.fresh ? `<div class="trow lenew">
+        <div class="field"><label for="le-${li}-lname">Line name</label><input type="text" id="le-${li}-lname" value="${esc(l.name)}"></div>
+        <div class="field"><label for="le-${li}-lcolor">Colour</label><select id="le-${li}-lcolor">${PALETTE.map(([n, hex]) => `<option value="${hex}" ${hex === l.color ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      </div>` : `<span><span class="chip">${esc(l.name)}</span></span>`}
+      ${l.players.length > 2 ? `<div class="row"><div class="field" style="width:150px"><label for="le-${li}-nb">On the bench at once</label><input type="number" id="le-${li}-nb" min="0" max="${l.players.length - 1}" step="1" value="${draftBench(l, count(l))}"></div>
+        <span class="note" id="le-${li}-field">${count(l) - draftBench(l, count(l))} on the field</span></div>` : ''}
+      ${l.players.length ? `<div class="hdr lerow"><span>#</span><span>Player</span><span>Bench</span><span>Line</span><span></span><span></span></div>` : '<p class="note">No players. This line is removed when you apply.</p>'}
+      ${l.players.map((p, k) => `<div class="prow lerow">
+        <span class="o">${k + 1}</span>
+        <input type="text" id="le-${li}-${k}-name" list="squadnames" value="${esc(p.name)}" placeholder="Name" aria-label="${esc(l.name)} player ${k + 1} name">
+        <input type="number" id="le-${li}-${k}-bench" min="0.25" step="0.5" value="${p.bench}" aria-label="${esc(l.name)} player ${k + 1} bench minutes">
+        <select id="le-${li}-${k}-move" aria-label="Line for ${esc(p.name || 'this player')}">${L.map((x, xi) => `<option value="${xi}" ${xi === li ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}<option value="full">Full game</option><option value="res">Reserves</option></select>
+        <button data-act="leup" data-li="${li}" data-k="${k}" ${k === 0 ? 'disabled' : ''} aria-label="Move earlier in the order">↑</button>
+        <button data-act="ledel" data-li="${li}" data-k="${k}" aria-label="Remove ${esc(p.name || 'this player')}">×</button>
+      </div>`).join('')}
+      <div class="row"><button class="btn" data-act="leadd" data-li="${li}">Add player</button></div>
+    </div>`).join('')}
+    ${(L.toFull || []).length ? `<div class="tset" style="--tc:#5BC8E8;--tink:#111"><span><span class="chip">Full game from now</span></span>
+      ${L.toFull.map((x, i) => `<div class="row"><b>${esc(x.name)}</b><span class="note">from ${esc((L.find(l => l.id === x.from) || {name:'a line'}).name)} · stops swapping and plays the rest of the game</span><button class="btn-sub" data-act="leunfull" data-i="${i}" style="padding:6px 10px">Undo</button></div>`).join('')}</div>` : ''}
+    <div class="row" style="margin-top:12px"><button class="btn" data-act="leaddline">Add line</button></div>
+    <p class="note" id="lemsg" aria-live="polite">${esc(lineMsg)}</p>
+    <div class="row" style="margin-top:4px">
+      <button class="btn primary" data-act="leapply">Apply changes</button>
+      <button class="btn" data-act="lecancel">Cancel</button>
+      ${sc.original ? '<button class="btn" data-act="leorig">Back to the lines from the start of the match</button>' : ''}
+    </div>
+  </section>`;
+}
+function applyLines(draft){
+  const g = G(), sc = sched(), old = U().tracks, at = Math.min(now(), total());
+  ensureSquad();
+  const drop = draftMoves(draft);
+  // Turn each typed name into a squad member; a name the squad doesn't know yet becomes a new member.
+  const lines = [];
+  for(const l of draft){
+    const players = [];
+    for(const p of l.players){
+      const nm = String(p.name || '').trim(); if(!nm || drop.has(p)) continue;
+      let pid = p.pid && S.squad[p.pid] && S.squad[p.pid].name.trim().toLowerCase() === nm.toLowerCase() ? p.pid : null;
+      if(!pid && p.pid && !S.squad[p.pid] && old.some(t => t.players.some(q => q.pid === p.pid && q.name === nm))) pid = p.pid;
+      // A small typo ("Lili" for "Lilli") still finds the squad member instead of making a new player.
+      if(!pid) pid = squadByName(nm) || findSquad(nm, '') || null;
+      if(!pid){ pid = uid(); S.squad[pid] = {name:nm, photo:'', sigs:[]}; }
+      const was = old.flatMap(t => t.players).find(q => q.pid === pid);
+      players.push({pid, name: S.squad[pid] ? S.squad[pid].name : nm, bench: Math.max(0.25, +p.bench || 2), photo: was ? was.photo : photoFor(pid)});
+    }
+    lines.push({id:l.id, name:l.name, color:l.color, offset:l.offset, onBench:draftBench(l, players.length), players, _set:!!l.nbSet});
+  }
+  // A line left with only one player is removed: she goes to the reserves until she's in a line again.
+  lines.filter(l => l.players.length === 1).forEach(l => { l.players = []; });
+  const seen = {}, twice = lines.flatMap(l => l.players).find(p => (seen[p.pid] = (seen[p.pid] || 0) + 1) > 1);
+  if(twice) return `${twice.name} is in two lines. Remove one of them.`;
+  const next = lines.filter(l => l.players.length);
+  if(!next.length) return 'Keep at least one line.';
+  const order = (t, s) => t.players.filter((p, k) => !(s && goneAt(s, k))).map(p => p.pid).join(',');
+  // A line with the same players in the same order carries on untouched, unless you set its bench number.
+  next.forEach(l => { const o = old.find(t => t.id === l.id);
+    if(o && order(o, g.tr[o.id]) === order(l) && !l._set){ if(o.onBench == null) delete l.onBench; else l.onBench = o.onBench; }
+    delete l._set; });
+  const changed = next.filter(l => { const o = old.find(t => t.id === l.id); return !o || order(o, g.tr[o.id]) !== order(l) || benchN(o) !== benchN(l); });
+  const gone = old.filter(t => !next.some(l => l.id === t.id));
+  // Who ends up where outside the lines: players sent to Full game play on without swapping; anyone else
+  // no longer in a line goes to the reserves; a reserve who is in a line again is no longer a reserve.
+  const toFull = (draft.toFull || []).map(x => { let pid = x.pid || squadByName(x.name);
+    if(!pid){ pid = uid(); S.squad[pid] = {name:String(x.name).trim(), photo:'', sigs:[]}; } return {pid, name:S.squad[pid] ? S.squad[pid].name : x.name}; });
+  const inNext = new Set(next.flatMap(l => l.players.map(p => p.pid))), fullSet = new Set(toFull.map(x => x.pid));
+  const toReserve = old.flatMap(t => { const s = g.tr[t.id]; return t.players.filter((p, k) => !(s && goneAt(s, k))); })
+    .filter(p => !inNext.has(p.pid) && !fullSet.has(p.pid));
+  const setRoles = () => {
+    const others = (sc.others || []).filter(o => !(inNext.has(o.pid) && o.why !== 'Full game'));
+    const put = (p, why) => { const o = others.find(x => x.pid === p.pid);
+      if(o) o.why = why; else others.push({pid:p.pid, name:p.name, photo:photoFor(p.pid) || (p.photo && p.photo !== '@squad' ? p.photo : ''), why}); };
+    toReserve.forEach(p => put(p, 'Reserve')); toFull.forEach(p => put(p, 'Full game'));
+    sc.others = others;
+  };
+  if(g.phase === 'pre'){ setRoles(); sc.setup.tracks = next; S.game = newGame(U()); lineEdit = null; save(); show(); return ''; }
+
+  g.history.push({lines:true, tracks:clone(old), tr:clone(g.tr), acc:clone(g.acc), past:clone(g.past || []), oldSwaps:clone(g.oldSwaps || []), fullEnd:clone(g.fullEnd || {}),
+    fullStart:clone(g.fullStart || {}), keepWas:clone(g.keep || {}), othersWas:clone(sc.others || []), hadOriginal:!!sc.original});
+  // A full-game player put into a line stops counting as full game now.
+  const wasIn = new Set(old.flatMap(t => t.players.map(p => p.pid)));
+  (sc.others || []).filter(o => o.why === 'Full game' && o.pid && !wasIn.has(o.pid) && next.some(l => l.players.some(p => p.pid === o.pid)))
+    .forEach(o => { g.fullEnd = g.fullEnd || {}; if(g.fullEnd[o.pid] == null) g.fullEnd[o.pid] = at; });
+  if(g.history.length > 40) g.history.shift();
+  if(!sc.original) sc.original = bareLines(old);
+  g.past = g.past || []; g.oldSwaps = g.oldSwaps || [];
+  const close = t => { g.past.push(...lineRows(t, g.tr[t.id], g.acc[t.id], at).map(r => Object.assign(r, {status:'Off'}))); g.oldSwaps.push(...g.tr[t.id].swaps); };
+  const notes = [];
+  // Where everyone is right now, before anything changes: who sits on a bench (and since when), who plays.
+  const sat = {}, playing = onFieldNow();
+  old.forEach(t => { const s = g.tr[t.id]; if(s) benchList(s).forEach(e => { sat[pidAt(t, s, e.k)] = e.since; }); });
+  changed.forEach(l => {
+    const o = old.find(t => t.id === l.id), os = o && g.tr[o.id];
+    // A brand-new line starts counting now; its players join from now anyway.
+    const r = carryLine(o || {players:[]}, os || {from:at}, (o && g.acc[o.id]) || [], l, at, sat, playing);
+    g.tr[l.id] = r.s; g.acc[l.id] = r.acc;
+    const ins = l.players.filter(p => !o || !o.players.some((q, k) => q.pid === p.pid && !goneAt(os, k))).map(p => p.name);
+    const outs = o ? o.players.filter((p, k) => !goneAt(os, k) && !l.players.some(q => q.pid === p.pid)).map(p => p.name) : [];
+    const nb = o && benchN(o) !== benchN(l) ? `${benchN(l)} on the bench` : '';
+    notes.push(`${l.name}: ` + ([ins.length ? ins.join(', ') + ' in' : '', outs.length ? outs.join(', ') + ' out' : '', nb].filter(Boolean).join(', ') || 'new order'));
+  });
+  gone.forEach(t => { close(t); delete g.tr[t.id]; delete g.acc[t.id]; notes.push(`${t.name} line removed`); });
+  sc.setup.tracks = next;
+  setRoles();
+  if(toReserve.length) notes.push(`${toReserve.map(p => p.name).join(', ')} to the reserves`);
+  // Players who now play the full game count from now (an earlier full-game stretch is kept as it was).
+  toFull.forEach(p => { g.fullStart = g.fullStart || {}; g.fullEnd = g.fullEnd || {};
+    if(g.fullEnd[p.pid] != null){ const fs = g.fullStart[p.pid] || 0;
+      g.past.push({line:'Full game', color:'#5BC8E8', pid:p.pid, name:p.name, played:Math.max(0, g.fullEnd[p.pid] - fs - (((g.keep || {})[p.pid] || {}).offTot || 0)), bench:0, ins:0, injured:0, cards:[], status:'Off'});
+      delete g.fullEnd[p.pid]; if(g.keep) delete g.keep[p.pid]; }
+    g.fullStart[p.pid] = at; });
+  if(toFull.length) notes.push(`${toFull.map(p => p.name).join(', ')} to full game`);
+  // Whoever is in a full-game player's spot follows her line; out of every line, her minutes in the spot
+  // count on their own from now. A line that held a full-game player's place and is gone gives it up.
+  Object.entries(g.keep || {}).forEach(([spot, kp]) => {
+    if(!kp || kp.off == null) return;
+    if(kp.toLine && !next.some(l => l.id === kp.toLine)) kp.toLine = null;
+    const by = kp.by; if(!by || !by.line) return;
+    const nl = next.find(l => l.players.some(p => p.pid === by.pid));
+    if(!nl){ by.line = null; by.at = at; return; }
+    const k = nl.players.findIndex(p => p.pid === by.pid), s2 = g.tr[nl.id];
+    by.line = nl.id; s2.away = s2.away || {};
+    if(s2.away[k] !== spot){ s2.away[k] = spot; if(onBench(s2, k)) dropBench(nl, s2, k); }
+  });
+  logEv(notes.length ? 'Lines changed · ' + notes.join(' · ') : 'Bench minutes changed');
+  lineEdit = null; lineMsg = ''; save(); renderGame(); update();
+  return '';
+}
+
+// A changed line keeps going. Everyone who stays keeps her place (bench or field), her bench timer and her
+// minutes; anyone leaving keeps the minutes she played here; new players join from now: someone who was
+// sitting (on another bench, or a reserve) starts on the bench, someone who was playing stays on the field.
+// Only if the line then has more or fewer on the bench than it should do players come on or sit down:
+// those due back first come on, the next in the order sit down.
+function carryLine(o, os, oacc, l, at, sat, playing){
+  const g = G(), map = {};
+  o.players.forEach((p, k) => { if(goneAt(os, k)) return; const nk = l.players.findIndex(q => q.pid === p.pid); if(nk >= 0) map[k] = nk; });
+  const m = k => map[k] == null ? null : map[k], kept = new Set(Object.values(map));
+  g.past = g.past || [];
+  if(o.players.length) g.past.push(...lineRows(o, os, oacc, at).filter(r => m(r.k) == null).map(r => Object.assign(r, {status:'Off'})));
+  // The line's minutes keep counting from where they started (the start of the match unless it was changed before).
+  const s = {benchIdx:null, benchSince:at, wait:[], extra:os.extra || 0, swaps:[], alert:{}, called:null, from:os.from || 0,
+    subs:{}, injured:[], injAt:{}, injTot:{}, cards:{}, cardLog:[], injLog:[], subOff:{}, away:{}, joined:{}};
+  const acc = l.players.map(() => 0);
+  Object.keys(map).forEach(k => { const nk = map[k]; k = +k;
+    acc[nk] = oacc[k] || 0;
+    if((os.injured || []).includes(k)){ s.injured.push(nk); s.injAt[nk] = os.injAt[k]; }
+    [['injTot'], ['subs'], ['subOff'], ['cards'], ['away'], ['joined']].forEach(([f]) => { if(os[f] && os[f][k] != null) s[f][nk] = os[f][k]; });
+  });
+  s.cardLog = (os.cardLog || []).filter(x => m(x.k) != null).map(x => Object.assign({}, x, {k:m(x.k)}));
+  s.injLog = (os.injLog || []).filter(x => m(x.k) != null).map(x => Object.assign({}, x, {k:m(x.k)}));
+  // Past swaps stay (they count in the report); ones by players who left no longer point at anyone here.
+  s.swaps = (os.swaps || []).map(w => Object.assign({}, w, {in:m(w.in) == null ? -1 : m(w.in), out:m(w.out) == null ? -1 : m(w.out)}));
+  const bench = benchList(os).filter(e => m(e.k) != null).map(e => ({k:m(e.k), since:e.since}));
+  const fresh = l.players.map((p, k) => k).filter(k => !kept.has(k));
+  fresh.forEach(k => { s.joined[k] = at; });
+  // The rotation carries on after whoever went off last (or the nearest player before her who is still here).
+  const n0 = o.players.length; let lo = null;
+  if(os.lastOut != null) for(let j = 0; j < n0 && lo == null; j++) lo = m((os.lastOut - j + n0) % n0);
+  s.lastOut = lo != null ? lo : (bench.length ? bench[bench.length - 1].k : 0);
+  const target = benchN(l), held = () => bench.length + Object.keys(s.away).length + s.injured.length;
+  // New players who were sitting go on the bench first (keeping their bench timer), then anyone who was off.
+  fresh.filter(k => sat[l.players[k].pid] != null).sort((a, b) => sat[l.players[a].pid] - sat[l.players[b].pid])
+    .concat(fresh.filter(k => sat[l.players[k].pid] == null && !playing.has(l.players[k].pid)))
+    .forEach(k => { if(held() >= target) return; const since = sat[l.players[k].pid] != null ? Math.min(at, sat[l.players[k].pid]) : at;
+      // Her bench time before the move is already counted in her old line, so it's taken off here in advance.
+      bench.push({k, since}); acc[k] = -(at - since); });
+  // Still short on the bench: the next players in the order sit down.
+  const n = l.players.length;
+  for(let j = 1; j <= n && held() < target; j++){ const k = (s.lastOut + j) % n;
+    if(bench.some(e => e.k === k) || s.injured.includes(k) || s.away[k] != null || s.cards[k]) continue;
+    bench.push({k, since:at}); }
+  // Too many on the bench: those due back first come on now.
+  bench.sort((a, b) => dueAt(l, s, a) - dueAt(l, s, b));
+  while(held() > target && bench.length){ const e = bench.shift(); acc[e.k] += Math.max(0, at - e.since); }
+  if(bench.length){ s.benchIdx = bench[0].k; s.benchSince = bench[0].since; s.wait = bench.slice(1); pickFront(l, s); }
+  return {s, acc};
+}
+
+// ---------- full-game players (keeper and others) ----------
+// They don't rotate, but can still be taken off: a keeper swapped for an extra field player, or someone
+// tired late in the game. Whoever comes on instead gets their own minutes.
+let keepUI = null; // {pid, mode, pick}: the full-game player whose panel is open, and who was picked to come on
+function fullPlayers(){ return (sched().others || []).filter(o => o.why === 'Full game' && isRealName(o.name) && !((G().fullEnd || {})[o.pid] != null)); }
+// Everyone sitting on a line's bench right now (not anyone off with a card): they can step into a
+// full-game player's spot, for example when the keeper is taken off for an extra field player.
+function benchCandidates(){
+  const g = G(), out = [];
+  U().tracks.forEach(t => { const s = g.tr[t.id];
+    benchList(s).forEach(e => { if(s.cards && s.cards[e.k]) return; const sp = slot(t, e.k);
+      out.push({line:t.id, lineName:t.name, color:t.color, k:e.k, name:sp.name, pid:pidAt(t, s, e.k), photo:photoOf(sp)}); }); });
+  return out;
+}
+// The person in a full-game player's spot, with a photo, for the card.
+function spotFace(by){
+  if(by.line){ const t = track(by.line), s = t && G().tr[by.line], k = t ? t.players.findIndex((p, i) => awayAt(s, i) && pidAt(t, s, i) === by.pid) : -1;
+    if(k >= 0) return {name:slot(t, k).name, photo:photoOf(slot(t, k)), lineName:t.name}; }
+  const o = (sched().others || []).find(x => x.pid && x.pid === by.pid);
+  return {name:by.name, photo:(o && photoOf(o)) || (by.pid && S.squad[by.pid] && S.squad[by.pid].photo) || '', lineName:''};
+}
+// Who can go in (or come on for) a full-game player: anyone on a bench, a reserve, or a typed name.
+// Choices that would break a coach rule are marked, but can still be picked.
+// Step 2: where the chosen player plays. In the full-game player's spot (when you're not sure yet: she can
+// swap with any benched player later), or in a line, which then plays with one more on the field and
+// takes her into its rotation. A bench player can go into her own line; anyone else into any line.
+function placeChooser(o, k, pick){
+  const pl = pick.moveIn ? placedIn(k) : null;
+  const nm = pick.moveIn ? (pl ? pl.name : '') : pick.current ? k.by.name : pick.line != null ? slot(track(pick.line), +pick.k).name : pick.name;
+  // Her own line first (marked), then every other line; when moving the player who came on, not the line she's in.
+  const own = pick.current ? k.by.line : pick.line;
+  const lines = (own ? [track(own)].concat(U().tracks.filter(t => t.id !== own)) : U().tracks).filter(t => t && !(pl && t.id === pl.t.id));
+  return `<div class="inj spotpick"><b>${pick.moveIn ? `Which line does ${esc(nm)} play in?` : `Where does ${esc(nm)} play?`}</b>
+    ${pick.current || pick.moveIn ? '' : `<div class="row"><button class="btn primary" data-act="fullplace" data-pid="${o.pid}" data-where="spot">In ${esc(o.name)}’s spot</button><span class="note">Not sure yet: she can swap with anyone on a bench later.</span></div>`}
+    <div class="row">${lines.map(t => `<button class="btn" data-act="fullplace" data-pid="${o.pid}" data-where="line" data-line="${t.id}"><span class="ltag" style="${tvars(t)}">${esc(t.name)}</span> rotates with ${esc(t.name)}${t.id === own ? ' (her line)' : ''}</button>`).join('')}</div>
+    <span class="note">${pick.moveIn ? `${esc(nm)} leaves ${esc(pl ? pl.t.name : '')} (her minutes there are kept) and the line you pick` : pick.current ? `${esc(nm)} leaves ${esc(o.name)}’s spot and the line` : 'A line you pick'} plays with one more on the field until ${esc(o.name)} is back.</span>
+    <div class="row"><button class="btn" data-act="fullclose">Cancel</button></div>
+  </div>`;
+}
+function spotChooser(o, k){
+  if(keepUI.pick) return placeChooser(o, k, keepUI.pick);
+  const off = k.off != null, cur = off ? k.by : null, act = off ? 'fullswap' : 'fulloff';
+  const base = onFieldNow(); if(!off) base.delete(o.pid); if(cur && cur.pid) base.delete(cur.pid);
+  const before = new Set(broken(base)), breaks = pid => pid ? broken(new Set([...base, pid])).filter(r => !before.has(r)) : [];
+  const playing = new Set(U().tracks.flatMap(t => t.players.map(p => p.pid)));
+  const reserves = (sched().others || []).filter(r => r.why === 'Reserve' && isRealName(r.name) && !playing.has(r.pid) && !(cur && cur.pid === r.pid));
+  const bench = benchCandidates(); let anyWarn = false;
+  const btn = (attrs, label, pid) => { const w = breaks(pid); if(w.length) anyWarn = true;
+    return `<button class="btn${w.length ? ' rulebtn' : ''}" data-act="${act}" data-pid="${o.pid}" ${attrs}${w.length ? ` title="${esc('Breaks a coach rule: ' + w.map(ruleText).join('; '))}"` : ''}>${w.length ? '⚠ ' : ''}${label}</button>`; };
+  const title = cur ? `Who takes ${esc(cur.name)}’s place in ${esc(o.name)}’s spot?` : off ? `Who goes in ${esc(o.name)}’s spot?` : `Who comes on for ${esc(o.name)}?`;
+  // Where she plays: the full-game player's spot (not sure yet), or a line, which then plays with one more.
+  const place = keepUI.place || 'spot';
+  const where = `<div class="row placerow"><label for="fullline-${o.pid}">Comes on in</label>
+    <select id="fullline-${o.pid}" style="width:auto"><option value="spot" ${place === 'spot' ? 'selected' : ''}>${esc(o.name)}’s spot (not sure yet)</option>
+      ${U().tracks.map(t => `<option value="${t.id}" ${place === t.id ? 'selected' : ''}>${esc(t.name)} (plays with one more)</option>`).join('')}</select></div>`;
+  const benchRow = bench.length ? `<span class="note">From a bench${cur && cur.line && track(cur.line) ? `. ${esc(cur.name)} goes back to the ${esc(track(cur.line).name)} bench` : ''}:</span>
+      <div class="row">${bench.map(c => btn(`data-line="${c.line}" data-k="${c.k}"`, `${esc(c.name)} <span class="ltag" style="${tvars(c)}">${esc(c.lineName)}</span>`, c.pid)).join('')}</div>` : '<span class="note">No one is on a bench right now.</span>';
+  const resRow = reserves.length ? `<span class="note">Reserves:</span><div class="row">${reserves.map(r => btn(`data-name="${esc(r.name)}"`, esc(r.name), r.pid)).join('')}</div>` : '';
+  return `<div class="inj spotpick"><b>${title}</b>${where}${benchRow}${resRow}
+    <div class="row"><input type="text" id="fullres-${o.pid}" list="squadnames" placeholder="Someone else? Type their name" aria-label="Who comes on" style="flex:1 1 140px;width:auto">
+      <button class="btn" data-act="${act}" data-pid="${o.pid}">Comes on</button></div>
+    ${anyWarn ? '<p class="note">⚠ would break a coach rule.</p>' : ''}
+    <p class="note" id="fullmsg-${o.pid}" aria-live="polite"></p>
+    <div class="row">${off ? (cur ? `<button class="btn" data-act="fullswap" data-pid="${o.pid}" data-none="1">${esc(cur.name)} off, no one on</button>` : '')
+      : `<button class="btn" data-act="fulloff" data-pid="${o.pid}" data-none="1">No one comes on</button>`}<button class="btn" data-act="fullclose">Cancel</button></div>
+  </div>`;
+}
+function fullCard(){
+  const g = G(), ps = fullPlayers(); if(!ps.length || g.phase === 'final') return '';
+  return `<article class="card fullcard" style="--tc:#5BC8E8;--tink:#111;order:999">
+    <div class="card-h"><span class="chip">Full game</span></div>
+    ${ps.map(o => { const k = (g.keep || {})[o.pid] || {}, off = k.off != null, occ = off && k.by ? spotFace(k.by) : null, given = off && k.toLine && track(k.toLine);
+      return `<div class="fullrow"><div class="who">${av(o)}<b>${esc(o.name)}</b></div>
+        ${off ? `<span class="note">Off since ${qtime(k.off)}</span><button class="btn" data-act="fullback" data-pid="${o.pid}">${esc(o.name)} back on</button>`
+          : `<button class="btn-sub" data-act="fullopen" data-pid="${o.pid}">Take off</button>`}
+      </div>
+      ${given ? (() => { const pl = placedIn(k);
+        return `<div class="fullrow spotrow"><span class="note">${esc(o.name)}’s place went to <span class="ltag" style="${tvars(given)}">${esc(given.name)}</span>${pl ? ` with ${esc(pl.name)}` : ''}: it plays with one more on the field until she’s back.</span>
+          ${pl ? `<button class="btn-sub" data-act="placedmove" data-pid="${o.pid}">${esc(pl.name)} to another line</button>` : ''}</div>`; })()
+        : off ? `<div class="fullrow spotrow">${occ
+          ? `<div class="who">${av(occ)}<div><b>${esc(occ.name)}</b><span class="note">in ${esc(o.name)}’s spot for <span class="num" data-since="${k.by.at}">${fmt(now() - k.by.at)}</span>${occ.lineName ? ` · from ${esc(occ.lineName)}` : ''}</span></div></div>`
+          : `<span class="note">No one in ${esc(o.name)}’s spot.</span>`}
+        <span class="row"><button class="btn-sub" data-act="fullopen" data-pid="${o.pid}">${occ ? `Swap ${esc(occ.name)}` : 'Put someone in'}</button>
+        ${occ ? `<button class="btn-sub" data-act="spotline" data-pid="${o.pid}">${esc(occ.name)} into a line</button>` : ''}</span></div>` : ''}
+      ${keepUI && keepUI.pid === o.pid ? (keepUI.back ? backChooser(o, k) : spotChooser(o, k)) : ''}`; }).join('')}
+  </article>`;
+}
+// ---------- coach rules ----------
+// Rules across lines, such as "at least 1 of Candela and Lore on the field" or "at most 2 of the younger
+// players on the field". The app doesn't plan around them; it warns before a swap that would break one.
+const rules = () => U().rules || [];
+function pidAt(t, s, k){ const sub = (s.subs || {})[k]; return sub ? (sub.pid || squadByName(sub.name) || 'n:' + sub.name) : t.players[k].pid; }
+function onFieldNow(){
+  const g = G(), set = new Set();
+  U().tracks.forEach(t => { const s = g.tr[t.id];
+    t.players.forEach((p, k) => { if(onBench(s, k) || (s.injured || []).includes(k) || (s.cards || {})[k] || goneAt(s, k)) return; set.add(pidAt(t, s, k)); }); });
+  fullPlayers().forEach(o => { const k = (g.keep || {})[o.pid]; if(k && k.off != null){ if(k.by && k.by.pid) set.add(k.by.pid); } else set.add(o.pid); });
+  return set;
+}
+const ruleName = pid => (S.squad[pid] && S.squad[pid].name) || '?';
+function ruleText(r){
+  const names = r.pids.map(ruleName), list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names.join('');
+  return `${r.type === 'max' ? 'at most' : 'at least'} ${r.n} of ${list} on the field`;
+}
+function broken(set){ return rules().filter(r => { const c = r.pids.filter(p => set.has(p)).length; return r.pids.length && (r.type === 'max' ? c > r.n : c < r.n); }); }
+// Rules a swap would break that aren't broken already.
+function swapBreaksAt(t, s, i, o, field){
+  const set = new Set(field), before = new Set(broken(set));
+  set.delete(pidAt(t, s, o)); set.add(pidAt(t, s, i));
+  return broken(set).filter(r => !before.has(r));
+}
+function swapBreaks(t, i, o, base){ return swapBreaksAt(t, G().tr[t.id], i, o, base || onFieldNow()); }
+// Why a line moves on with a different swap than planned, under its faces.
+function altNote(t, p){
+  if(!p || p.held || (p.skipIn == null && p.skipOut == null)) return '';
+  const nm = k => `<b>${esc(slot(t, k).name)}</b>`, parts = [];
+  if(p.skipIn != null) parts.push(`${nm(p.skipIn)} stays on the bench for now, so ${nm(p.i)} comes on first`);
+  if(p.skipOut != null) parts.push(`${nm(p.skipOut)} stays on, so ${nm(p.o)} comes off instead`);
+  return `<p class="altnote">⏸ ${parts.join('; ')} (coach rule: ${esc(p.why.map(ruleText).join('; '))}).</p>`;
+}
+const ruleWarn = list => list.length ? `<p class="rulewarn">⚠ This swap breaks a coach rule: ${list.map(r => esc(ruleText(r))).join('; ')}</p>` : '';
+// A line with no swap allowed by the coach rules is on hold: greyed out with its timer still running,
+// sorted below the swaps you can make, and silent, until another swap makes one allowed again.
+// (When only one player is blocked, the line moves on without her; see swapPlan.)
+// A swap you already called isn't put on hold: you decided to make it.
+function heldBy(t){
+  const s = G().tr[t.id]; if(!rules().length || halted(s) || s.called != null) return [];
+  const p = swapPlan(t, s); return p && p.held ? p.why : [];
+}
+function rulesSetup(){
+  const ppl = [...new Map(U().tracks.flatMap(t => t.players).concat((sched().others || []).filter(o => o.why !== 'Not playing'))
+    .filter(p => p.pid && isRealName(p.name)).map(p => [p.pid, p.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  return `<h2>Coach rules</h2>
+    <p class="lead">Rules about who’s on the field together, for example “at least 1 of the two strongest defenders” or “at most 2 of the youngest players”. Each line card warns you before a swap that would break a rule, and a red banner shows if one is broken right now. You can change rules during a match.</p>
+    ${rules().map((r, i) => `<div class="tset rule">
+      <div class="row"><select id="rule-${i}-type" aria-label="Rule type" style="width:auto"><option value="min" ${r.type !== 'max' ? 'selected' : ''}>At least</option><option value="max" ${r.type === 'max' ? 'selected' : ''}>At most</option></select>
+        <input type="number" id="rule-${i}-n" min="0" max="11" step="1" value="${r.n}" aria-label="How many" style="width:70px"><span>of these on the field:</span>
+        <button class="btn-sub" data-act="delrule" data-i="${i}" style="margin-left:auto;padding:6px 10px">Remove</button></div>
+      <div class="rulepl">${ppl.map(([pid, nm]) => `<label class="pick"><input type="checkbox" id="rule-${i}-p-${pid}" ${r.pids.includes(pid) ? 'checked' : ''}>${esc(nm)}</label>`).join('')}</div>
+      <p class="note">${r.pids.length ? 'Rule: ' + esc(ruleText(r)) + '.' : 'Tick the players this rule is about.'}</p>
+    </div>`).join('')}
+    <div class="row" style="margin-top:8px"><button class="btn" data-act="addrule">Add a rule</button></div>`;
+}
+
+// Someone steps into a full-game player's spot. A bench player leaves her line's bench (that line may then
+// play on without a bench) and her minutes keep counting through her own line; anyone else gets minutes
+// of her own for the time in the spot.
+function spotIn(spot, c, at){
+  const g = G();
+  if(c && c.line != null){
+    const t = track(c.line), s = t && g.tr[c.line], k = +c.k; if(!s || !onBench(s, k)) return null;
+    g.acc[t.id][k] += Math.max(0, at - sinceOf(s, k));
+    const front = s.benchIdx; dropBench(t, s, k);
+    if(s.benchIdx !== front){ s.called = null; s.alert = {}; }
+    s.away = s.away || {}; s.away[k] = spot;
+    return {name:slot(t, k).name, pid:pidAt(t, s, k), at, line:t.id};
+  }
+  if(c && c.name){ const hit = squadByName(c.name); return {name: hit ? S.squad[hit].name : c.name, pid: hit || null, at}; }
+  return null;
+}
+// Whoever is in the spot comes out: a line player goes back to her own line's bench (and that line's
+// rotation picks her up again); anyone else's minutes in the spot are kept.
+function spotOut(spot, by, at){
+  const g = G(); if(!by) return;
+  if(by.line){
+    const t = track(by.line), s = t && g.tr[by.line]; if(!s) return;
+    const k = Object.keys(s.away || {}).map(Number).find(i => s.away[i] === spot); if(k == null) return;
+    delete s.away[k];
+    if(s.benchIdx == null){ s.benchIdx = k; s.benchSince = at; s.wait = []; s.extra = 0; s.alert = {}; s.called = null; }
+    else { s.wait = (s.wait || []).concat({k, since:at}); if(s.called == null) pickFront(t, s); }
+    return;
+  }
+  g.past = g.past || []; g.past.push({line:'Full game', color:'#5BC8E8', pid:by.pid, name:by.name, played:Math.max(0, at - by.at), bench:0, ins:1, injured:0, cards:[], status:'Off'});
+}
+// Undo for anything around a full-game player: the spot, the lines it touches, and who's a reserve.
+const keepUndo = label => { const g = G(), sc = sched();
+  g.history.push({keep:true, before:clone(g.keep || {}), past:clone(g.past || []), tr:clone(g.tr), acc:clone(g.acc), tracks:clone(U().tracks), others:clone(sc.others || []), hadOriginal:!!sc.original, label, id:null});
+  if(g.history.length > 40) g.history.shift(); };
+const fromWhere = by => by && by.line && track(by.line) ? ` (from the ${track(by.line).name} bench)` : '';
+// The chosen player plays in a line, which now has one more on the field. A player from that line's
+// bench comes on without anyone going off; anyone else joins the line from now on. Returns {name, pid}.
+function placeInLine(c, lineId, at){
+  const g = G(), t = track(lineId), s = t && g.tr[lineId]; if(!s || !c) return null;
+  if(c.line != null && c.line === lineId){
+    const k = +c.k; if(!onBench(s, k)) return null;
+    g.acc[lineId][k] += Math.max(0, at - sinceOf(s, k));
+    const front = s.benchIdx; dropBench(t, s, k); if(s.benchIdx !== front){ s.called = null; s.alert = {}; }
+    return {name:slot(t, k).name, pid:pidAt(t, s, k)};
+  }
+  // From another line's bench: she leaves that line now (its bench is one smaller) and joins this one.
+  if(c.line != null){
+    const t0 = track(c.line), s0 = t0 && g.tr[c.line], k0 = +c.k; if(!s0 || !onBench(s0, k0)) return null;
+    g.acc[c.line][k0] += Math.max(0, at - sinceOf(s0, k0));
+    const front = s0.benchIdx; dropBench(t0, s0, k0); if(s0.benchIdx !== front){ s0.called = null; s0.alert = {}; }
+    s0.gone = s0.gone || {}; s0.gone[k0] = {at, to:lineId};
+    c = {pid:pidAt(t0, s0, k0), name:slot(t0, k0).name};
+  }
+  const hit = c.pid || squadByName(c.name) || null, sc = sched();
+  let pid = hit; if(!pid){ pid = uid(); S.squad[pid] = {name:String(c.name).trim(), photo:'', sigs:[]}; }
+  const nm = S.squad[pid] ? S.squad[pid].name : c.name;
+  if(!sc.original) sc.original = bareLines(U().tracks);
+  // Her bench minutes: the middle value of the line's, so she fits its rhythm (change it in Setup if needed).
+  const mids = t.players.map(p => +p.bench).sort((a, b) => a - b), bench = mids[Math.floor(mids.length / 2)] || 2;
+  t.players.push({pid, name:nm, bench, photo:photoFor(pid)});
+  g.acc[lineId].push(0); s.joined = s.joined || {}; s.joined[t.players.length - 1] = at;
+  // A reserve who joins a line is no longer listed as a reserve.
+  sc.others = (sc.others || []).filter(o => !(o.pid === pid && o.why !== 'Full game'));
+  return {name:nm, pid};
+}
+// A player on the field leaves her line now (her minutes there stop) and joins another line on the field.
+function moveLine(fromId, i, toId, at){
+  const g = G(), t = track(fromId), s = t && g.tr[fromId]; if(!s) return null;
+  if(s.away) delete s.away[i];
+  s.gone = s.gone || {}; s.gone[i] = {at, to:toId};
+  return placeInLine({pid:pidAt(t, s, i), name:slot(t, i).name}, toId, at);
+}
+function fullOff(pid, choice, where, lineId){
+  const g = G(), at = Math.min(now(), total()), o = (sched().others || []).find(x => x.pid === pid); if(!o) return;
+  keepUndo('full-game swap');
+  g.keep = g.keep || {}; const k = g.keep[pid] = g.keep[pid] || {offTot:0};
+  k.off = at; k.by = null; k.toLine = null; k.inPid = null;
+  if(where === 'line' && choice){ const r = placeInLine(choice, lineId, at); k.toLine = lineId; k.inPid = r && r.pid;
+    logEv(`${o.name} off, ${r ? r.name : 'a player'} on in ${track(lineId).name} (it plays with one more on the field)`); }
+  else { k.by = spotIn(pid, choice, at); logEv(`${o.name} off${k.by ? `, ${k.by.name} on${fromWhere(k.by)}` : ', no one on'}`); }
+  keepUI = null; save(); renderGame();
+}
+// The player in the spot swaps with someone else (anyone on a bench, a reserve) or just comes off.
+function spotSwap(pid, choice, where, lineId){
+  const g = G(), at = Math.min(now(), total()), o = (sched().others || []).find(x => x.pid === pid), k = (g.keep || {})[pid];
+  if(!o || !k || k.off == null) return;
+  keepUndo('swap in the spot');
+  const was = k.by; spotOut(pid, was, at); k.by = null;
+  if(where === 'line' && choice){ const r = placeInLine(choice, lineId, at); k.toLine = lineId; k.inPid = r && r.pid;
+    logEv(`${o.name}’s spot: ${was ? `${was.name} off, ` : ''}${r ? r.name : 'a player'} on in ${track(lineId).name} (it plays with one more on the field)`); }
+  else { k.by = spotIn(pid, choice, at);
+    logEv(`${o.name}’s spot: ${[was ? `${was.name} off` : '', k.by ? `${k.by.name} on${fromWhere(k.by)}` : ''].filter(Boolean).join(', ') || 'no change'}`); }
+  keepUI = null; save(); renderGame();
+}
+// Once it's clear, the player in the spot becomes part of a line: back in her own line, or in any other
+// line (her minutes so far stay with her old line). That line plays with one more on the field until the
+// full-game player is back.
+function spotToLine(pid, lineId){
+  const g = G(), at = Math.min(now(), total()), o = (sched().others || []).find(x => x.pid === pid), k = (g.keep || {})[pid];
+  if(!o || !k || k.off == null || !k.by || !track(lineId)) return;
+  keepUndo('spot to line');
+  const by = k.by;
+  if(by.line){ const s = g.tr[by.line], i = Object.keys(s.away || {}).map(Number).find(x => s.away[x] === pid);
+    if(lineId === by.line){ if(i != null) delete s.away[i]; k.inPid = by.pid; }
+    else if(i != null){ const r = moveLine(by.line, i, lineId, at); k.inPid = r && r.pid; } }
+  else { spotOut(pid, by, at); const r = placeInLine({name:by.name, pid:by.pid}, lineId, at); k.inPid = r && r.pid; }
+  k.toLine = lineId; k.by = null;
+  logEv(`${by.name} from ${o.name}’s spot into ${track(lineId).name} (it plays with one more on the field)`);
+  keepUI = null; save(); renderGame();
+}
+// Where the player who came on in a full-game player's place is now, if she's on the field in that line.
+function placedIn(k){
+  const t = k.toLine && track(k.toLine), s = t && G().tr[t.id]; if(!s || !k.inPid) return null;
+  const i = t.players.findIndex((p, x) => !goneAt(s, x) && pidAt(t, s, x) === k.inPid);
+  if(i < 0 || onBench(s, i) || awayAt(s, i) || (s.injured || []).includes(i)) return null;
+  return {t, s, i, name:slot(t, i).name};
+}
+// The player who came on in a line moves to another line, and the full-game player's place goes with her.
+function placedToLine(pid, lineId){
+  const g = G(), at = Math.min(now(), total()), o = (sched().others || []).find(x => x.pid === pid), k = (g.keep || {})[pid];
+  const pl = k && k.off != null ? placedIn(k) : null; if(!o || !pl || !track(lineId) || lineId === pl.t.id) return;
+  keepUndo('line change for the player in her place');
+  const r = moveLine(pl.t.id, pl.i, lineId, at); k.toLine = lineId; k.inPid = r && r.pid;
+  logEv(`${pl.name} moves from ${pl.t.name} to ${track(lineId).name}; ${o.name}’s place goes with her`);
+  keepUI = null; save(); renderGame();
+}
+// A line player sits down on her own line's bench.
+function sitDown(t, s, k, at){
+  if(s.benchIdx == null){ s.benchIdx = k; s.benchSince = at; s.wait = []; s.extra = 0; s.alert = {}; s.called = null; }
+  else { s.wait = (s.wait || []).concat({k, since:at}); if(s.called == null) pickFront(t, s); }
+}
+// Field players who can come off when a full-game player comes back on.
+function fieldPlayers(){
+  const g = G(), out = [];
+  U().tracks.forEach(t => { const s = g.tr[t.id];
+    t.players.forEach((p, k) => { if(onBench(s, k) || (s.injured || []).includes(k) || (s.cards || {})[k] || awayAt(s, k) || goneAt(s, k)) return;
+      out.push({t, s, k, name:slot(t, k).name, pid:pidAt(t, s, k)}); }); });
+  return out;
+}
+// Who comes off when the full-game player is back: whoever was in her spot, the next player of the line
+// that took her place, or anyone else on the field you pick.
+function backChooser(o, k){
+  const g = G(), occ = k.by ? spotFace(k.by) : null, T = k.toLine && track(k.toLine), nextOut = T ? rotOuts(T, g.tr[T.id])[0] : null;
+  const base = onFieldNow(); base.add(o.pid); const before = new Set(broken(base));
+  const warn = pid => broken(new Set([...base].filter(x => x !== pid))).filter(r => !before.has(r));
+  const btn = (attrs, label, pid, primary) => { const w = warn(pid);
+    return `<button class="btn${primary ? ' primary' : ''}${w.length ? ' rulebtn' : ''}" data-act="fullbackoff" data-pid="${o.pid}" ${attrs}${w.length ? ` title="${esc('Breaks a coach rule: ' + w.map(ruleText).join('; '))}"` : ''}>${w.length ? '⚠ ' : ''}${label}</button>`; };
+  const field = fieldPlayers().filter(x => !(T && x.t.id === T.id && x.k === nextOut));
+  return `<div class="inj spotpick"><b>Who comes off for ${esc(o.name)}?</b>
+    <div class="row">${occ ? btn('data-who="spot"', `${esc(occ.name)} <span class="ltag">in the spot</span>`, k.by.pid, true) : ''}
+      ${T && nextOut != null ? btn(`data-line="${T.id}" data-k="${nextOut}"`, `${esc(slot(T, nextOut).name)} <span class="ltag" style="${tvars(T)}">${esc(T.name)} · next</span>`, pidAt(T, g.tr[T.id], nextOut), true) : ''}</div>
+    <span class="note">Or someone else on the field (she goes to her line’s bench${occ ? `, and ${esc(occ.name)} stays on in ${occ.lineName ? esc(occ.lineName) : 'that player’s line'}` : ''}):</span>
+    <div class="row">${field.map(x => btn(`data-line="${x.t.id}" data-k="${x.k}"`, `${esc(x.name)} <span class="ltag" style="${tvars(x.t)}">${esc(x.t.name)}</span>`, x.pid)).join('')}</div>
+    <div class="row"><button class="btn" data-act="fullclose">Cancel</button></div>
+  </div>`;
+}
+function fullBack(pid, who){
+  const g = G(), at = Math.min(now(), total()), k = (g.keep || {})[pid], o = (sched().others || []).find(x => x.pid === pid); if(!k || k.off == null || !o) return;
+  keepUndo('full-game swap');
+  const occ = k.by; let off = '', stays = '';
+  if(who && who.line != null){
+    // Someone else comes off: she sits down on her own line's bench...
+    const t = track(who.line), s = t && g.tr[who.line], i = +who.k;
+    if(s){ sitDown(t, s, i, at); off = `${slot(t, i).name} to the ${t.name} bench`;
+      // ...and whoever was in the spot stays on: in her own line, or a reserve joins this line.
+      if(occ){ if(occ.line){ const s2 = g.tr[occ.line], j = Object.keys(s2.away || {}).map(Number).find(x => s2.away[x] === pid);
+          if(j != null) delete s2.away[j]; stays = `${occ.name} stays on in ${track(occ.line).name}`; }
+        else { spotOut(pid, occ, at); placeInLine({name:occ.name, pid:occ.pid}, who.line, at); stays = `${occ.name} stays on in ${t.name}`; } } }
+  } else if(occ){ spotOut(pid, occ, at); off = `${occ.name} off`; }
+  k.offTot = (k.offTot || 0) + Math.max(0, at - k.off);
+  logEv(`${o.name} back on${off ? ', ' + off : ''}${stays ? ', ' + stays : ''}`);
+  k.off = null; k.by = null; k.toLine = null; k.inPid = null; keepUI = null; save(); renderGame();
 }
 
 // ---------- cards ----------
@@ -553,7 +1357,7 @@ const CARD_TYPES = [['green', 'Green · 2 min', 2], ['yellow5', 'Yellow · 5 min
 function cardPanel(t, s){
   const crd = s.cards || {}, inj = s.injured || [];
   if(cardUI.k == null){
-    const ks = t.players.map((p, k) => k).filter(k => !inj.includes(k) && !crd[k]);
+    const ks = t.players.map((p, k) => k).filter(k => !inj.includes(k) && !crd[k] && !awayAt(s, k) && !goneAt(s, k));
     return `<div class="inj cardp"><b>Who got the card?</b><div class="row">${ks.map(k => `<button class="btn" data-act="cardpick" data-id="${t.id}" data-k="${k}">${esc(slot(t, k).name)}</button>`).join('')}</div>
       <div class="row"><button class="btn" data-act="cardclose">Cancel</button></div></div>`;
   }
@@ -571,6 +1375,13 @@ function giveCard(id, k, type){
   s.cards[k] = {type: type.replace(/\d+/, ''), at, until: def[2] == null ? null : at + def[2] * 60};
   s.cardLog.push({k, at, type:def[1], name:slot(t, k).name});
   if(s.called != null && inOut(t).o === k) s.called = null;
+  // With more than one on the bench, a bench player sent off leaves the bench and the others carry on.
+  const front = s.benchIdx;
+  if(onBench(s, k) && benchList(s).length > 1){
+    if(def[2] == null){ g.acc[id][k] += Math.max(0, at - sinceOf(s, k)); dropBench(t, s, k); }
+    else pickFront(t, s);
+    if(s.benchIdx !== front) s.called = null;
+  }
   logEv(`${t.name}: ${slot(t, k).name} ${def[2] == null ? 'red card' : def[1].toLowerCase().replace(' · ', ' card, ')}`);
   cardUI = null; save(); renderGame(); update();
 }
@@ -579,17 +1390,22 @@ function giveCard(id, k, type){
 let injUI = null; // {id, k}: the line whose injury panel is open, and who is hurt
 function injPanel(t, s){
   if(injUI.k == null){
-    const ks = t.players.map((p, k) => k).filter(k => !(s.injured || []).includes(k));
+    const ks = t.players.map((p, k) => k).filter(k => !(s.injured || []).includes(k) && !awayAt(s, k) && !goneAt(s, k));
     return `<div class="inj"><b>Who is injured?</b><div class="row">${ks.map(k => `<button class="btn" data-act="injpick" data-id="${t.id}" data-k="${k}">${esc(slot(t, k).name)}</button>`).join('')}</div>
       <div class="row"><button class="btn" data-act="injclose">Cancel</button></div></div>`;
   }
   const k = injUI.k, nm = esc(slot(t, k).name);
-  const benchOpt = s.benchIdx === k ? 'Line plays on without a bench'
+  const benchOpt = onBench(s, k) ? (benchList(s).length > 1 ? 'Mark injured (the rest of the bench carries on)' : 'Line plays on without a bench')
     : s.benchIdx != null ? `${esc(slot(t, s.benchIdx).name)} comes on now` : 'Mark injured (no one on the bench)';
+  // A reserve always comes on by name, so their minutes land on the right person in the report.
+  const playing = new Set(U().tracks.flatMap(x => x.players.map(p => p.name.trim().toLowerCase()).concat(Object.values(G().tr[x.id].subs || {}).map(r => r.name.trim().toLowerCase()))));
+  const reserves = (sched().others || []).filter(o => o.why === 'Reserve' && isRealName(o.name) && !playing.has(o.name.trim().toLowerCase()));
   return `<div class="inj"><b>${nm} is injured. How do you cover?</b>
     <div class="row"><button class="btn primary" data-act="injbench" data-id="${t.id}" data-k="${k}">${benchOpt}</button></div>
-    <div class="row"><input type="text" id="res-${t.id}" list="squadnames" placeholder="Reserve’s name" aria-label="Reserve’s name" style="flex:1 1 140px;width:auto">
+    ${reserves.length ? `<span class="note">Or a reserve takes ${nm}’s spot:</span><div class="row">${reserves.map(o => `<button class="btn" data-act="injres" data-id="${t.id}" data-k="${k}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div>` : ''}
+    <div class="row"><input type="text" id="res-${t.id}" list="squadnames" placeholder="${reserves.length ? 'Someone else? Type their name' : 'Reserve’s name'}" aria-label="Reserve’s name" style="flex:1 1 140px;width:auto">
       <button class="btn" data-act="injres" data-id="${t.id}" data-k="${k}">Reserve takes ${nm}’s spot</button></div>
+    <p class="note" id="resmsg-${t.id}" aria-live="polite"></p>
     <div class="row"><button class="btn" data-act="injclose">Cancel</button></div></div>`;
 }
 function injure(id, k, mode, resName){
@@ -601,14 +1417,17 @@ function injure(id, k, mode, resName){
   if(mode === 'reserve'){
     // The reserve steps into the injured player's spot; the rotation carries on unchanged.
     const nm = String(resName || '').trim() || 'Reserve', hit = squadByName(nm);
-    s.subs[k] = {name: hit ? S.squad[hit].name : nm, photo: hit ? S.squad[hit].photo : '', pid: hit || null};
+    s.subs[k] = {name: hit ? S.squad[hit].name : nm, photo: hit ? S.squad[hit].photo : '', pid: hit || null, at, base: spotPlayed(s, g.acc[id], k, at).played};
+    // A full-game player who takes the spot now counts through the line instead.
+    if(hit && (sched().others || []).some(o => o.why === 'Full game' && o.pid === hit)){ g.fullEnd = g.fullEnd || {}; if(g.fullEnd[hit] == null) g.fullEnd[hit] = at; }
     logEv(`${t.name}: ${hurt} injured, reserve ${s.subs[k].name} takes the spot`);
   } else {
-    if(s.benchIdx === k){ g.acc[id][k] += at - s.benchSince; }
+    const wasBench = onBench(s, k), none = s.benchIdx == null;
+    if(wasBench){ g.acc[id][k] += at - sinceOf(s, k); dropBench(t, s, k); }
     else if(s.benchIdx != null){ const b = s.benchIdx; g.acc[id][b] += at - s.benchSince; s.swaps.push({t:at, in:b, out:k, wait:0, injury:true});
-      logEv(`${t.name}: ${hurt} injured, ${slot(t, b).name} comes on`); }
-    if(s.benchIdx === k || s.benchIdx == null) logEv(`${t.name}: ${hurt} injured`);
-    s.benchIdx = null; s.called = null; s.injured.push(k); s.injAt[k] = at;
+      logEv(`${t.name}: ${hurt} injured, ${slot(t, b).name} comes on`); dropBench(t, s, b); }
+    if(wasBench || none) logEv(`${t.name}: ${hurt} injured`);
+    s.called = null; s.alert = {}; s.injured.push(k); s.injAt[k] = at;
   }
   injUI = null; save(); renderGame(); update();
 }
@@ -616,14 +1435,21 @@ function backOn(id, k){
   const g = G(), s = g.tr[id], at = Math.min(now(), total());
   g.history.push({id, s:clone(s), acc:clone(g.acc[id]), label:'return'});
   const t = track(id);
-  if(s.subs && s.subs[k]){ logEv(`${t.name}: ${t.players[k].name} back, takes the spot from ${s.subs[k].name}`); delete s.subs[k]; }
+  if(s.subs && s.subs[k]){
+    // The reserve's minutes are kept as a row of their own; the spot carries on for the returning player.
+    const sub = s.subs[k], r = lineRows(t, s, g.acc[id], at).find(x => x.name === sub.name && x.status !== 'Injured');
+    if(r){ g.past = g.past || []; g.past.push(Object.assign({}, r, {status:'Off'})); s.subOff = s.subOff || {}; s.subOff[k] = (s.subOff[k] || 0) + r.played; }
+    if(sub.at != null){ s.injTot = s.injTot || {}; s.injTot[k] = (s.injTot[k] || 0) + at - sub.at; }
+    logEv(`${t.name}: ${t.players[k].name} back, takes the spot from ${sub.name}`); delete s.subs[k]; }
   else if(s.injured && s.injured.includes(k)){
     logEv(`${t.name}: ${slot(t, k).name} back from injury`);
     s.injTot = s.injTot || {}; s.injTot[k] = (s.injTot[k] || 0) + at - s.injAt[k];
     g.acc[id][k] += at - s.injAt[k]; delete s.injAt[k];
     s.injured = s.injured.filter(x => x !== k);
     // Once the line is complete again, the returning player sits first and the rotation restarts.
-    if(s.benchIdx == null && !s.injured.length){ s.benchIdx = k; s.benchSince = at; s.extra = 0; s.alert = {}; }
+    if(s.benchIdx == null && !s.injured.length){ s.benchIdx = k; s.benchSince = at; s.wait = []; s.lastOut = k; s.extra = 0; s.alert = {}; }
+    // On a line with more than one bench spot that kept rotating, she takes her bench spot back.
+    else if(s.benchIdx != null){ s.wait = (s.wait || []).concat({k, since:at}); if(s.called == null) pickFront(t, s); }
   }
   save(); renderGame(); update();
 }
@@ -633,6 +1459,7 @@ function update(){
   $('clock').textContent = fmt(t0 - (g.quarter-1)*qLen());
   $('qlabel').textContent = (g.practice ? `Practice ${g.speed}× · ` : '') + (g.phase === 'final' ? 'Full time' : g.phase === 'break' ? `End of Q${g.quarter}` : `Q${g.quarter} · ${fmt(t0)} total`);
   document.querySelectorAll('[data-until]').forEach(el => { el.textContent = fmt(+el.dataset.until - t0); });
+  document.querySelectorAll('[data-since]').forEach(el => { el.textContent = fmt(t0 - +el.dataset.since); });
   const gb = $('go');
   gb.textContent = g.phase === 'live' ? 'Pause' : g.phase === 'break' ? `Start Q${g.quarter+1}` : g.phase === 'paused' ? 'Resume' : g.phase === 'final' ? 'Done' : 'Start';
   gb.classList.toggle('pause', g.phase === 'live');
@@ -641,49 +1468,61 @@ function update(){
 
   const stopped = U().tracks.filter(t => halted(g.tr[t.id]));
   const waiting = U().tracks.filter(t => g.tr[t.id].called != null && !halted(g.tr[t.id]));
-  const list = U().tracks.filter(t => g.tr[t.id].called == null && !halted(g.tr[t.id])).map(t => ({t, rem: due(t) - t0})).sort((a,b) => a.rem - b.rem);
+  const all = U().tracks.filter(t => g.tr[t.id].called == null && !halted(g.tr[t.id])).map(t => ({t, rem: due(t) - t0})).sort((a,b) => a.rem - b.rem);
+  // Lines on hold by a coach rule don't count as "next"; they're listed separately with their timers.
+  const held = new Set(all.filter(x => heldBy(x.t).length).map(x => x.t.id));
+  const list = all.filter(x => !held.has(x.t.id)), onHold = all.filter(x => held.has(x.t.id));
   const wtxt = waiting.length ? `<span class="clash" style="color:var(--accent)">Waiting: ${waiting.map(t => esc(t.name) + ' ' + fmt(t0 - g.tr[t.id].called)).join(', ')}</span> · ` : '';
-  if(!list.length) $('next').innerHTML = wtxt;
+  const htxt = onHold.length ? `<span class="heldnote">On hold (coach rule): ${onHold.map(x => esc(x.t.name) + ' ' + (x.rem > 0 ? fmt(x.rem) : '+' + fmt(-x.rem))).join(', ')}</span>` : '';
+  if(!list.length){ $('next').innerHTML = wtxt + htxt; $('mnext').textContent = onHold.length ? 'On hold: ' + onHold.map(x => x.t.name).join(', ') : ''; }
   if(list.length){
     const a = list[0], b = list[1], io = inOut(a.t);
     let h = wtxt + `Next: <b>${esc(a.t.name)}</b> ${a.rem>0?'in '+fmt(a.rem):'now'} · ${esc(slot(a.t, io.i).name)} for ${esc(slot(a.t, io.o).name)}`;
     if(b && b.rem - a.rem < CLASH) h += ` <span class="clash">+ ${esc(b.t.name)} ${b.rem>0?fmt(b.rem):'now'}: close together, do one early</span>`;
     else if(b) h += ` · then ${esc(b.t.name)} ${fmt(b.rem)}`;
-    $('next').innerHTML = h;
+    $('next').innerHTML = h + (htxt ? ' · ' + htxt : '');
     $('mnext').textContent = `${a.t.name} ${a.rem > 0 ? fmt(a.rem) : 'now'}`;
   }
 
   if(S.view === 'game'){
-    // Lines that were called sit on top, then the rest by how soon they swap.
-    waiting.concat(list.map(x => x.t), stopped).forEach((t, k) => { const c = document.querySelector(`[data-card="${t.id}"]`); if(c) c.style.order = k; });
+    // Lines that have to swap now sit on top, then lines already called and waiting for the players,
+    // then the rest by how soon they swap, then lines on hold by a coach rule.
+    const dueNow = list.filter(x => x.rem <= 0).map(x => x.t), later = list.filter(x => x.rem > 0).map(x => x.t);
+    const ordered = dueNow.concat(waiting, later, onHold.map(x => x.t), stopped), key = ordered.map(t => t.id).join(',');
+    if(key !== cardOrder){
+      const pin = anchorCard(); cardOrder = key;
+      ordered.forEach((t, k) => { const c = document.querySelector(`[data-card="${t.id}"]`); if(c) c.style.order = k; });
+      restoreCard(pin);
+    }
     U().tracks.forEach(t => {
       const card = document.querySelector(`[data-card="${t.id}"]`); if(!card) return;
       const s = g.tr[t.id], d = due(t), rem = d - t0;
       if(halted(s)){
-        card.classList.remove('soon', 'due', 'called');
+        card.classList.remove('soon', 'due', 'called', 'held');
         card.querySelector('[data-f="state"]').textContent = 'Playing through';
         card.querySelector('[data-f="count"]').textContent = '–';
         card.querySelector('[data-f="bar"]').style.width = '0';
         card.querySelector('[data-f="bt"]').hidden = true;
         return;
       }
-      const called = s.called != null;
-      const soon = !called && rem <= SOON && rem > 0, isDue = !called && rem <= 0;
-      card.classList.toggle('soon', soon); card.classList.toggle('due', isDue); card.classList.toggle('called', called);
+      const called = s.called != null, hold = held.has(t.id);
+      const soon = !called && !hold && rem <= SOON && rem > 0, isDue = !called && !hold && rem <= 0;
+      card.classList.toggle('soon', soon); card.classList.toggle('due', isDue); card.classList.toggle('called', called); card.classList.toggle('held', hold);
       const f = n => card.querySelector(`[data-f="${n}"]`);
-      const span = Math.max(1, d - s.benchSince);
-      f('bar').style.width = Math.min(100, Math.max(0, ((called ? s.called : t0) - s.benchSince) / span * 100)) + '%';
+      const io = inOut(t), sat = sinceOf(s, io.i), from = sat != null ? sat : s.benchSince, span = Math.max(1, d - from);
+      f('bar').style.width = Math.min(100, Math.max(0, ((called ? s.called : t0) - from) / span * 100)) + '%';
       if(called){
         f('state').textContent = 'Called · waiting';
         f('count').textContent = fmt(t0 - s.called);
         f('bt').hidden = true;
         return;
       }
-      const carded = s.cards && s.cards[s.benchIdx];
-      f('state').textContent = carded && !isDue ? 'Bench player carded' : isDue ? (rem < -15 ? 'Overdue' : 'Swap now') : soon ? 'Get ready' : 'Next swap in';
-      f('count').textContent = isDue ? '+' + fmt(-rem) : fmt(rem);
-      f('bt').hidden = !(g.phase === 'break' && rem <= BREAK_PULL);
-      const btn = f('btn'); if(btn){ btn.textContent = carded ? 'Waiting for card' : isDue || (g.phase === 'break' && rem <= BREAK_PULL) ? 'Call swap' : 'Call early'; btn.disabled = !!carded; }
+      const carded = s.cards && s.cards[io.i];
+      f('state').textContent = hold ? 'On hold · coach rule' : carded && !isDue ? 'Bench player carded' : isDue ? (rem < -15 ? 'Overdue' : 'Swap now') : soon ? 'Get ready' : 'Next swap in';
+      f('count').textContent = rem <= 0 ? '+' + fmt(-rem) : fmt(rem);
+      f('bt').hidden = hold || !(g.phase === 'break' && rem <= BREAK_PULL);
+      // On hold you can still make the swap if the coaches decide to: the button says so.
+      const btn = f('btn'); if(btn){ btn.textContent = carded ? 'Waiting for card' : hold ? 'Call anyway' : isDue || (g.phase === 'break' && rem <= BREAK_PULL) ? 'Call swap' : 'Call early'; btn.disabled = !!carded; }
     });
   }
   if(S.view === 'minutes' && (Date.now() % 1000) < 260) refreshMinutes();
@@ -693,15 +1532,24 @@ function update(){
 function simulate(setup, offsets){
   const T = Math.max(1, +setup.quarterMin || 17.5) * 60 * Math.max(1, +setup.quarters || 4);
   return setup.tracks.map((t, k) => {
-    const out = []; let idx = 0, from = 0, extra = offsets ? offsets[k] : (+t.offset || 0);
-    while(out.length < 400){ const d = from + benchMin(t.players[idx]) * 60 + extra; if(d >= T) break; out.push(d); from = d; extra = 0; idx = (idx + 1) % t.players.length; }
+    const out = [], n = t.players.length, B = benchN(t), bench = [];
+    let extra = offsets ? offsets[k] : (+t.offset || 0), last = B - 1;
+    for(let j = 0; j < B; j++) bench.push({k:j, since:0});
+    const dueOf = e => e.since + benchMin(t.players[e.k]) * 60;
+    while(out.length < 400){
+      bench.sort((a, b) => dueOf(a) - dueOf(b) || a.since - b.since);
+      const f = bench.shift(), d = dueOf(f) + extra; if(d >= T) break; out.push(d); extra = 0;
+      let o = last; for(let j = 1; j <= n; j++){ const c = (last + j) % n; if(c !== f.k && !bench.some(e => e.k === c)){ o = c; break; } }
+      bench.push({k:o, since:d}); last = o;
+    }
     return out;
   });
 }
 function clashInfo(times){
   const all = []; times.forEach((arr, k) => arr.forEach(x => all.push({x, k}))); all.sort((a,b) => a.x - b.x);
-  let n = 0, minGap = Infinity; const bad = new Set();
-  for(let j=1;j<all.length;j++){ if(all[j].k === all[j-1].k) continue; const gp = all[j].x - all[j-1].x;
+  let n = 0, minGap = Infinity; const bad = new Set(), tr = U().tracks;
+  // Two swaps of the same line only clash when that line has more than one player on the bench.
+  for(let j=1;j<all.length;j++){ if(all[j].k === all[j-1].k && !(tr[all[j].k] && benchN(tr[all[j].k]) > 1)) continue; const gp = all[j].x - all[j-1].x;
     minGap = Math.min(minGap, gp); if(gp < CLASH){ n++; bad.add(all[j].k+':'+all[j].x); bad.add(all[j-1].k+':'+all[j-1].x); } }
   return {n, minGap, bad, count: all.length};
 }
@@ -754,49 +1602,96 @@ function renderPlan(){
 // ---------- minutes, report and season log ----------
 const mins = s => Math.round(s / 6) / 10; // seconds → minutes with one decimal
 // One row per person who played in this match, counted on the game clock.
+// Time a rotation spot has been on the field since the line's current set-up began (s.from).
+function spotPlayed(s, acc, k, t0){
+  if(goneAt(s, k)) t0 = Math.min(t0, s.gone[k].at);
+  const injNow = (s.injured || []).includes(k), c = (s.cards || {})[k];
+  const bs = sinceOf(s, k), cardOff = c && bs == null ? Math.max(0, Math.min(t0, c.until == null ? t0 : c.until) - c.at) : 0;
+  const benched = acc[k] + (bs != null && !injNow ? Math.max(0, t0 - bs) : 0) + (injNow ? Math.max(0, t0 - s.injAt[k]) : 0) + cardOff;
+  // A player who joined the line during the match (for example in the keeper's place) counts from then.
+  const start = Math.max(s.from || 0, (s.joined || {})[k] || 0);
+  return {played: Math.max(0, t0 - start - benched), benched};
+}
+// One row per person in one line. A reserve covering an injury gets a row of their own, so the injured
+// player keeps the minutes they played.
+function lineRows(t, s, acc, t0){
+  const rows = [];
+  t.players.forEach((p, k) => {
+    const injNow = (s.injured || []).includes(k), c = (s.cards || {})[k], sub = (s.subs || {})[k];
+    const {played, benched} = spotPlayed(s, acc, k, t0), subPlayed = sub ? Math.max(0, played - (sub.base || 0)) : 0;
+    const injured = ((s.injTot || {})[k] || 0) + (injNow ? Math.max(0, t0 - s.injAt[k]) : 0) + (sub ? Math.max(0, t0 - (sub.at || t0)) : 0);
+    rows.push({k, line:t.name, color:t.color, pid:p.pid || null, name:p.name,
+      status: goneAt(s, k) ? 'Moved' : injNow || sub ? 'Injured' : c ? 'Card' : onBench(s, k) ? 'Bench' : 'Field',
+      played: Math.max(0, played - subPlayed - ((s.subOff || {})[k] || 0)), bench: benched, ins: s.swaps.filter(w => w.in === k && !(sub && w.t >= sub.at)).length,
+      injured, cards: (s.cardLog || []).filter(x => x.k === k && x.name === p.name).map(x => x.type.split(' ·')[0])});
+    if(sub) rows.push({k, line:t.name, color:t.color, pid:sub.pid || squadByName(sub.name) || null, name:sub.name, status: onBench(s, k) ? 'Bench' : 'Field',
+      played: subPlayed, bench:0, ins: s.swaps.filter(w => w.in === k && w.t >= sub.at).length, injured:0,
+      cards: (s.cardLog || []).filter(x => x.k === k && x.name === sub.name).map(x => x.type.split(' ·')[0])});
+  });
+  return rows;
+}
+// The same person can show up more than once: before and after a line change, or moved to another line.
+function mergeRows(rows, t0){
+  const by = new Map();
+  rows.forEach(r => {
+    const key = r.pid || 'n:' + String(r.name).toLowerCase(), e = by.get(key);
+    if(!e){ by.set(key, Object.assign({}, r, {cards:(r.cards || []).slice()})); return; }
+    e.played = Math.min(t0, e.played + r.played); e.bench += r.bench; e.ins += r.ins; e.injured += r.injured; e.cards = e.cards.concat(r.cards || []);
+    // Where she is now wins over where she was (a line she left, or an earlier part of the match).
+    const gone = st => st === 'Off' || st === 'Moved';
+    if(gone(e.status) && !gone(r.status)){ e.status = r.status; e.line = r.line; e.color = r.color; }
+  });
+  return [...by.values()];
+}
 function matchRows(){
   const g = G(), t0 = Math.min(now(), total()), rows = [];
-  U().tracks.forEach(t => {
-    const s = g.tr[t.id];
-    t.players.forEach((p, k) => {
-      const injNow = (s.injured || []).includes(k), c = (s.cards || {})[k];
-      const cardOff = c && k !== s.benchIdx ? Math.max(0, Math.min(t0, c.until == null ? t0 : c.until) - c.at) : 0;
-      const benched = g.acc[t.id][k] + (k === s.benchIdx && !injNow ? Math.max(0, t0 - s.benchSince) : 0) + (injNow ? Math.max(0, t0 - s.injAt[k]) : 0) + cardOff;
-      const sp = slot(t, k), injured = ((s.injTot || {})[k] || 0) + (injNow ? Math.max(0, t0 - s.injAt[k]) : 0);
-      rows.push({line:t.name, color:t.color, pid: sp.sub ? (sp.pid || squadByName(sp.name) || null) : (p.pid || null), name:sp.name,
-        status: injNow ? 'Injured' : c ? 'Card' : k === s.benchIdx ? 'Bench' : 'Field',
-        played: Math.max(0, t0 - benched), bench: benched, ins: s.swaps.filter(w => w.in === k).length,
-        injured, cards: (s.cardLog || []).filter(x => x.k === k).map(x => x.type.split(' ·')[0])});
-    });
+  U().tracks.forEach(t => rows.push(...lineRows(t, g.tr[t.id], g.acc[t.id], t0)));
+  // A full-game player counts the whole game, until she joins a line: from then on the line counts her
+  // minutes (her two rows are added together below). Put in a line before the game, the line counts it all.
+  const inLine = new Set(U().tracks.flatMap(t => t.players.map(p => p.pid)));
+  (sched().others || []).filter(o => o.why === 'Full game').forEach(o => {
+    // A player moved to Full game during the match counts from then (fullStart).
+    const end = (g.fullEnd || {})[o.pid], fs = Math.min(t0, (g.fullStart || {})[o.pid] || 0), k = (g.keep || {})[o.pid] || {}, stop = end != null ? Math.min(t0, end) : t0;
+    const base = end != null ? Math.max(0, stop - fs) : inLine.has(o.pid) ? 0 : Math.max(0, t0 - fs);
+    // Time taken off (a keeper pulled for an extra field player) doesn't count as playing time.
+    const offNow = k.off != null ? Math.max(0, stop - k.off) : 0;
+    rows.push({line:'Full game', color:'#5BC8E8', pid:o.pid || null, name:o.name || 'Full-game player',
+      status: k.off != null ? 'Off' : 'Field', played: Math.max(0, base - (k.offTot || 0) - offNow), bench: (k.offTot || 0) + offNow, ins:0, injured:0, cards:[]});
+    // Someone from a line in the spot keeps counting through her own line; anyone else counts here.
+    if(k.by && !k.by.line) rows.push({line:'Full game', color:'#5BC8E8', pid:k.by.pid || null, name:k.by.name, status:'Field', played:Math.max(0, t0 - k.by.at), bench:0, ins:1, injured:0, cards:[]});
   });
-  (sched().others || []).filter(o => o.why === 'Full game').forEach(o => rows.push({line:'Full game', color:'#5BC8E8', pid:o.pid || null, name:o.name || 'Full-game player',
-    status:'Field', played:t0, bench:0, ins:0, injured:0, cards:[]}));
-  return rows;
+  (g.past || []).forEach(r => rows.push(Object.assign({}, r, {status:'Off'})));
+  return mergeRows(rows, t0);
 }
 function reportText(){
   const g = G(), rows = matchRows(), t0 = Math.min(now(), total());
   const head = `${sched().name} · ${new Date().toLocaleDateString()} · ${g.phase === 'final' ? 'full time' : 'at ' + qtime(t0)}`;
   const lines = [...new Set(rows.map(r => r.line))].map(l => `${l.toUpperCase()}\n` + rows.filter(r => r.line === l)
     .map(r => `  ${r.name}: ${fmt(r.played)} played${r.ins ? `, on ${r.ins}×` : ''}${r.injured ? `, injured ${fmt(r.injured)}` : ''}${r.cards.length ? `, ${r.cards.join(' + ')} card` : ''}`).join('\n'));
-  const waits = U().tracks.flatMap(t => g.tr[t.id].swaps.filter(w => w.wait > 0).map(w => w.wait));
+  const all = U().tracks.flatMap(t => g.tr[t.id].swaps).concat(g.oldSwaps || []), waits = all.filter(w => w.wait > 0).map(w => w.wait);
   const avgWait = waits.length ? ` Average time from call to swap: ${fmt(waits.reduce((a, b) => a + b, 0) / waits.length)}.` : '';
-  return `${head}\n\n${lines.join('\n\n')}\n\n${U().tracks.reduce((a, t) => a + g.tr[t.id].swaps.length, 0)} swaps.${avgWait}`;
+  return `${head}\n\n${lines.join('\n\n')}\n\n${all.length} swaps.${avgWait}`;
 }
 function reportCsv(){
   const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
   return ['Line,Player,Played (min),Bench (min),Times on,Injured (min),Cards']
     .concat(matchRows().map(r => [r.line, r.name, mins(r.played), mins(r.bench), r.ins, mins(r.injured), r.cards.join(' + ')].map(q).join(','))).join('\n');
 }
-function saveMatch(){
-  const g = G(); if(g.practice) return;
-  const id = g.matchId || ('m' + Date.now());
-  const m = {id, name:sched().name, date:new Date().toISOString().slice(0, 10),
+// Put this match in the season log (or bring its entry up to date). A match whose minutes you corrected
+// by hand is left alone.
+function recordMatch(){
+  const g = G(); if(g.practice || g.phase === 'pre') return false;
+  const id = g.matchId || ('m' + Date.now()), i = S.matches.findIndex(x => x.id === id);
+  if(i >= 0 && S.matches[i].edited) return false;
+  const m = {id, name:sched().name, date:(i >= 0 && S.matches[i].date) || new Date().toISOString().slice(0, 10),
     rows: matchRows().map(r => ({pid:r.pid, name:r.name, line:r.line, played:Math.round(r.played), bench:Math.round(r.bench), ins:r.ins, injured:Math.round(r.injured), cards:r.cards})),
     log: (g.log || []).slice(-300)};
   g.matchId = id;
-  const i = S.matches.findIndex(x => x.id === id); if(i >= 0) S.matches[i] = m; else S.matches.push(m);
-  save(); renderMinutes();
+  if(i >= 0){ if(stable(S.matches[i]) === stable(m)) return false; S.matches[i] = m; } else S.matches.push(m);
+  return true;
 }
+function saveMatch(){ recordMatch(); save(); renderMinutes(); }
+const isSaved = g => !!(g.matchId && S.matches.some(x => x.id === g.matchId));
 function seasonRows(){
   const by = {};
   S.matches.forEach(m => m.rows.forEach(r => {
@@ -814,7 +1709,28 @@ function minutesBody(){
   return matchRows().map(r => `<tr style="--tc:${r.color}"><td><span class="sw"></span>${esc(r.name)}</td><td>${r.status}</td><td class="r num">${fmt(r.played)}</td><td class="r num">${fmt(r.bench)}</td><td class="r num">${r.ins}</td></tr>`).join('');
 }
 function refreshMinutes(){ const b = $('mbody'); if(b) b.innerHTML = minutesBody(); const l = $('mlog'); if(l) l.innerHTML = logHtml(); }
-let reportMsg = '';
+let reportMsg = '', openMatch = null, fixMatch = null;
+// A match from the season log, opened on its own: who played how long, and everything that happened.
+function savedReport(m){
+  const lines = [...new Set(m.rows.map(r => r.line))].map(l => `${String(l).toUpperCase()}\n` + m.rows.filter(r => r.line === l)
+    .map(r => `  ${r.name}: ${fmt(r.played)} played${r.ins ? `, on ${r.ins}×` : ''}${r.injured ? `, injured ${fmt(r.injured)}` : ''}${(r.cards || []).length ? `, ${r.cards.join(' + ')} card` : ''}`).join('\n'));
+  return `${m.name} · ${m.date}\n\n${lines.join('\n\n')}\n\nLOG\n${(m.log || []).map(e => `  ${qtime(e.t)}  ${e.text}`).join('\n')}`;
+}
+// A saved match: its minutes (which you can correct by hand when the app couldn't follow what happened)
+// and its log.
+function matchDetail(m){
+  const fixing = fixMatch === m.id;
+  return `<div class="mdetail">
+    ${m.edited ? '<p class="note">Minutes corrected by hand.</p>' : ''}
+    ${fixing ? '<p class="note">Type each player’s minutes played, like 12:30 or 12. The season log uses these.</p>' : ''}
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Player</th><th>Line</th><th class="r">Played</th><th class="r">Bench</th><th class="r">Times on</th></tr></thead><tbody>
+      ${m.rows.map((r, i) => `<tr><td>${esc(r.name)}</td><td>${esc(r.line)}</td><td class="r num">${fixing ? `<input type="text" id="fix-${i}" class="fixin" inputmode="numeric" value="${fmt(r.played)}" aria-label="Minutes played by ${esc(r.name)}">` : fmt(r.played)}</td><td class="r num">${fmt(r.bench || 0)}</td><td class="r num">${r.ins || 0}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${fixing ? `<p class="note" id="fixmsg" aria-live="polite"></p><div class="row"><button class="btn primary" data-act="fixsave" data-mid="${m.id}">Save corrections</button><button class="btn" data-act="fixcancel">Cancel</button></div>` : ''}
+    ${(m.log || []).length ? `<ol class="log">${m.log.slice().reverse().map(e => `<li><span class="num">${qtime(e.t)}</span>${esc(e.text)}</li>`).join('')}</ol>` : '<p class="note">No log saved for this match.</p>'}
+    <div class="row"><button class="btn" data-act="copymatch" data-mid="${m.id}">Copy this match’s report</button>${fixing ? '' : `<button class="btn" data-act="fixmatch" data-mid="${m.id}">Correct minutes</button>`}</div>
+  </div>`;
+}
 function renderMinutes(){
   const g = G(), saved = g.matchId && S.matches.some(x => x.id === g.matchId), season = seasonRows();
   $('v-minutes').innerHTML = `<h2>Playing time</h2><p class="lead">Counted on the game clock from the swaps you confirmed. Time out injured or with a card doesn’t count as playing time.</p>
@@ -826,6 +1742,7 @@ function renderMinutes(){
       ${dl || OFFLINE ? '<button class="btn" data-act="csv">Save as spreadsheet (CSV)</button>' : ''}
       ${g.practice ? '<span class="note">Practice runs aren’t added to the season log.</span>'
         : `<button class="btn" data-act="savematch">${saved ? 'Update in season log' : 'Add to season log'}</button>`}
+      ${!g.practice && g.phase === 'final' && saved ? '<span class="note">Saved to the season log automatically at full time.</span>' : ''}
     </div>
     <p class="note" id="reportmsg" aria-live="polite">${esc(reportMsg)}</p>
     <textarea id="reporttext" class="reportbox" readonly hidden></textarea>
@@ -835,7 +1752,9 @@ function renderMinutes(){
     ${S.matches.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Player</th><th class="r">Matches</th><th class="r">Total</th><th class="r">Average</th><th class="r">Last match</th><th class="r">Injured</th></tr></thead><tbody>
       ${season.map(e => `<tr><td>${esc(e.name)}</td><td class="r num">${e.n}</td><td class="r num">${fmt(e.total)}</td><td class="r num">${fmt(e.total / e.n)}</td><td class="r num">${fmt(e.last[e.last.length - 1])}</td><td class="r num">${e.injured ? fmt(e.injured) : '–'}</td></tr>`).join('')}
       </tbody></table></div>
-      <div class="matches">${S.matches.slice().reverse().map(m => `<div class="match"><span><b>${esc(m.name)}</b> · ${esc(m.date)}</span><button class="btn-sub" data-act="delmatch" data-mid="${m.id}">Remove</button></div>`).join('')}</div>`
+      <div class="matches">${S.matches.slice().reverse().map(m => `<div><div class="match"><span><b>${esc(m.name)}</b> · ${esc(m.date)}</span><span class="row">
+        <button class="btn-sub" data-act="viewmatch" data-mid="${m.id}" aria-expanded="${openMatch === m.id}">${openMatch === m.id ? 'Close' : 'View'}</button>
+        <button class="btn-sub" data-act="delmatch" data-mid="${m.id}">Remove</button></span></div>${openMatch === m.id ? matchDetail(m) : ''}</div>`).join('')}</div>`
       : '<p class="note">No matches yet. At full time, tap “Add to season log”.</p>'}`;
 }
 
@@ -864,7 +1783,7 @@ function renderSetup(){
     </div>
     ${locked?'<p class="note">A game is running. Reset the game (at the bottom) to switch schedules.</p>':''}
     <h2>Lines and bench times</h2>
-    <p class="lead">One card per colour line. List players in swap order (the small number): number 1 starts on the bench and comes on for number 2, then 2 comes on for 3, and so on around the loop. Bench minutes is the big number. Players who play the whole game, like the keeper, don’t need a line.</p>
+    <p class="lead">One card per colour line. List players in swap order (the small number): number 1 starts on the bench and comes on for number 2, then 2 comes on for 3, and so on around the loop. Bench minutes is the big number. If a line has two players on the bench at once, set “On the bench at once” to 2: numbers 1 and 2 start on the bench and each comes back on after her own bench minutes, one swap at a time. Players who play the whole game, like the keeper, don’t need a line.</p>
     <div class="row">
       <div class="field" style="width:130px"><label for="s-q">Quarter (min)</label><input type="number" id="s-q" min="1" step="0.5" value="${u.quarterMin}"></div>
       <div class="field" style="width:110px"><label for="s-n">Quarters</label><input type="number" id="s-n" min="1" max="4" value="${u.quarters}" ${locked?'disabled':''}></div>
@@ -875,6 +1794,7 @@ function renderSetup(){
         <div class="field"><label for="t-${t.id}-color">Colour</label><input type="color" id="t-${t.id}-color" value="${t.color}"></div>
         <div class="field"><label for="t-${t.id}-off">First swap delay (s)</label><input type="number" id="t-${t.id}-off" min="0" step="5" value="${+t.offset||0}" ${locked?'disabled':''}></div>
       </div>
+      ${t.players.length > 2 ? `<div class="row"><div class="field" style="width:150px"><label for="t-${t.id}-nb">On the bench at once</label><input type="number" id="t-${t.id}-nb" min="1" max="${t.players.length - 1}" step="1" value="${benchN(t)}" ${locked?'disabled':''}></div>${locked ? '<span class="note">To change this during a match, use “Change lines” on the Game tab.</span>' : ''}</div>` : ''}
       <div class="hdr"><span>#</span><span></span><span>Player</span><span>Bench</span><span></span><span></span></div>
       ${t.players.map((p, k) => `<div class="prow">
         <span class="o">${k+1}</span>
@@ -890,6 +1810,8 @@ function renderSetup(){
     <div class="row" style="margin-top:12px">
       <button class="btn" data-act="addt" ${locked?'disabled':''}>Add line</button>
       <button class="btn danger" data-act="reset" id="resetbtn">Reset game</button>
+      ${resetAsk ? `<div class="inj" id="resetask" style="flex-basis:100%"><b>This match isn’t in the season log yet.</b><span class="note">Save its minutes before resetting, or they’re gone.</span>
+        <div class="row"><button class="btn primary" data-act="resetsave">Save to the season log, then reset</button><button class="btn danger" data-act="resetnosave">Reset without saving</button><button class="btn" data-act="resetcancel">Cancel</button></div></div>` : ''}
       <button class="btn" data-act="defaults" ${locked?'disabled':''}>Load example board</button>
     </div>
     ${locked?'<p class="note">The game has started, so you can rename players and change bench minutes, but adding or removing players needs a reset.</p>':''}
@@ -901,6 +1823,7 @@ function renderSetup(){
         <select id="o-${i}-why" aria-label="Role">${['Full game','Reserve','Not playing'].map(w => `<option ${o.why === w ? 'selected' : ''}>${w}</option>`).join('')}</select>
         <button data-act="delo" data-i="${i}" aria-label="Remove">×</button></div>`).join('') || '<p class="note">None yet. Uploading a board adds them automatically.</p>'}</div>
     <div class="row" style="margin-top:8px"><button class="btn" data-act="addo">Add a player</button></div>
+    ${rulesSetup()}
     <h2>Match day</h2>
     <p class="lead">Your phone buzzes and beeps 30 seconds before each swap, again when it’s due, and every 15 seconds while it’s overdue. Keep this page open with the volume up. The screen stays on while the clock runs.</p>
     <div class="row"><button class="btn primary" data-act="testbuzz">Test the buzz</button><span class="note" id="buzzmsg" aria-live="polite"></span></div>
@@ -936,11 +1859,18 @@ document.addEventListener('input', e => {
   const id = e.target.id, v = e.target.value, u = U(); let m;
   if(m = id.match(/^cp-(\d+)$/)){ const it = cleanPending[+m[1]]; if(it && v && S.squad[v]){ setSquadPhoto(v, it.photo, it.sig); cleanPending.splice(+m[1], 1); cleanMsg = `Photo set for ${S.squad[v].name}.`; save(); renderSetup(); renderGame(); update(); } return; }
   if(id === 'set-confirm'){ S.settings.confirm = e.target.checked; save(); return; }
+  if(m = id.match(/^le-(\d+)-nb$/)){ const l = lineEdit && lineEdit[+m[1]]; if(l && v !== '' && +v >= 0){ l.onBench = Math.round(+v); l.nbSet = true; showMoves(); } return; }
+  if(m = id.match(/^le-(\d+)-(\d+)-(name|bench)$/)){ const p = lineEdit && lineEdit[+m[1]] && lineEdit[+m[1]].players[+m[2]]; if(!p) return;
+    if(m[3] === 'bench') p.bench = +v || p.bench; else p.name = v;
+    return; }
   if(m = id.match(/^o-(\d+)-why$/)){ const o = (sched().others || [])[+m[1]]; if(o){ o.why = v; save(); } return; }
   if(id === 's-pick'){ S.activeId = v; S.game = newGame(U()); save(); show(); return; }
   if(id === 's-name'){ sched().name = v; const o = document.querySelector(`#s-pick option[value="${sched().id}"]`); if(o) o.textContent = v; }
   else if(id === 's-q'){ u.quarterMin = Math.max(1, +v || 17.5); }
   else if(id === 's-n'){ u.quarters = Math.min(4, Math.max(1, +v || 4)); }
+  else if(m = id.match(/^t-(.+)-nb$/)){ const t = track(m[1]); if(!t || !(+v >= 1)) return;
+    t.onBench = Math.max(1, Math.min(t.players.length - 1, Math.round(+v)));
+    if(G().phase === 'pre'){ const s = G().tr[t.id]; if(s) startBench(t, s, 0); } }
   else if(m = id.match(/^t-(.+)-(name|color|off)$/)){ const t = track(m[1]); if(!t) return;
     if(m[2]==='name') t.name = v; if(m[2]==='color'){ t.color = v; e.target.closest('.tset').setAttribute('style', tvars(t)); }
     if(m[2]==='off'){ t.offset = Math.max(0, +v || 0); if(G().phase==='pre') G().tr[t.id].extra = t.offset; } }
@@ -1057,7 +1987,7 @@ const BOARD_PROMPT = `You are reading a photo or screenshot of a field hockey su
 How this board works:
 - Each player is a square headshot. Most have a thick coloured frame. The frame colour is the player's rotation line: players only swap with others of the same colour.
 - A large faded digit printed over the face is that player's bench minutes.
-- A small number in a solid coloured square at the bottom-right corner of the frame is the player's swap order within the line (1 = first to come on).
+- A small number in a solid coloured square at the bottom-right corner of the frame is the player's swap order within the line. Number 1 starts the match on the bench and is the first to come on. Within one line the numbers run 1, 2, 3… with no repeats. Look closely at every corner, since the number is small and can be partly covered. If you really can't read it, use null rather than guessing from where the photo sits on the board.
 - A large X over the face instead of a digit means the player is not playing.
 - A small tag at the bottom-left may show the player's name.
 - Light blue / cyan frames are players who play the whole game, such as the keeper. Headshots without a frame are reserves.
@@ -1178,12 +2108,13 @@ async function readBoard(file){
     syncSquadPhotos();
     if(!made.setup.tracks.length){ setReadMsg('No colour lines with two or more players were found in that photo.'); return; }
     const id = 's' + Date.now(), running = G().phase !== 'pre';
+    if(rules().length) made.setup.rules = clone(rules()); // the coaches' rules usually hold week to week
     S.schedules.push({id, name:made.name, setup:made.setup, others:made.skipped});
     if(!running){ S.activeId = id; S.game = newGame(made.setup); }
     lastImport = {id, skipped:made.skipped};
     const n = made.setup.tracks.reduce((a, t) => a + t.players.length, 0);
     ensureSquad();
-    setReadMsg(`${running ? 'Saved (reset the game to switch to it): ' : ''}Made “${made.name}” with ${made.setup.tracks.length} lines and ${n} players.${made.matched ? ` Recognised ${made.matched} from your squad${made.byPhoto ? ` (${made.byPhoto} by photo match)` : ''}.` : ''}${made.unsure ? ` ${made.unsure} bench time${made.unsure>1?'s':''} couldn’t be read and ${made.unsure>1?'were':'was'} set to 2 min.` : ''} Check the numbers against your board before the game.`);
+    setReadMsg(`${running ? 'Saved (reset the game to switch to it): ' : ''}Made “${made.name}” with ${made.setup.tracks.length} lines and ${n} players.${made.matched ? ` Recognised ${made.matched} from your squad${made.byPhoto ? ` (${made.byPhoto} by photo match)` : ''}.` : ''}${made.unsure ? ` ${made.unsure} bench time${made.unsure>1?'s':''} couldn’t be read and ${made.unsure>1?'were':'was'} set to 2 min.` : ''}${made.guessed.length ? ` A swap-order number couldn’t be read in ${made.guessed.join(', ')}, so check who starts on the bench there.` : ''} Check the numbers against your board before the game.`);
     save();
   }catch(e){ setReadMsg(readErr(e)); }
   finally{ readCtl = null; show(); }
@@ -1226,20 +2157,28 @@ function buildFromBoard(res, cv, known, px, pool){
     if(FULL_GAME.includes(col)){ skipped.push({photo, name, why:'Full game', pid: pid || uid(), sig}); return; }
     if(col === 'none' || !col){ skipped.push({photo, name, why:'Reserve', pid: pid || uid(), sig}); return; }
     let bench = Number(p.bench); if(!(bench > 0)){ bench = 2; unsure++; }
-    (groups[col] = groups[col] || []).push({name, bench, order:Number(p.order) || 99, photo, pid, sig});
+    (groups[col] = groups[col] || []).push({name, bench, order:Number(p.order) || null, photo, pid, sig});
   });
-  const tracks = [];
+  const tracks = [], guessed = [];
   Object.keys(groups).forEach((col, k) => {
     const ps = groups[col];
     if(ps.length < 2){ ps.forEach(p => skipped.push({photo:p.photo, name:p.name, why:'Reserve', pid:p.pid || uid(), sig:p.sig})); return; }
+    // A corner number that couldn't be read (or was read twice) takes the number missing in that line,
+    // so a hidden "1" doesn't push the player who starts on the bench to the end of the line.
+    const used = new Set(), free = [];
+    ps.forEach(p => { if(p.order >= 1 && p.order <= ps.length && !used.has(p.order)) used.add(p.order); else p.order = null; });
+    for(let i = 1; i <= ps.length; i++) if(!used.has(i)) free.push(i);
+    const lost = ps.filter(p => p.order == null);
+    lost.forEach(p => { p.order = free.shift(); });
     ps.sort((a, b) => a.order - b.order);
+    if(lost.length) guessed.push((LINE_COLORS[col] || [col])[0]);
     const [label, hex] = LINE_COLORS[col] || [col[0].toUpperCase() + col.slice(1), '#6B7B8C'];
     tracks.push({id:'t' + Date.now() + k, name:label, color:hex, offset:0,
       players: ps.map((p, i) => ({name: p.name || `${label} ${i+1}`, bench:p.bench, photo:p.photo, pid:p.pid || uid(), sig:p.pid ? undefined : p.sig}))});
   });
   skipped.forEach(o => { if(S.squad[o.pid]) delete o.sig; });
   const title = res && res.title ? String(res.title).slice(0, 40) : 'Board ' + new Date().toLocaleDateString();
-  return {name:title, unsure, matched, byPhoto, skipped, setup:{quarterMin:U().quarterMin, quarters:U().quarters, tracks}};
+  return {name:title, unsure, matched, byPhoto, skipped, guessed, setup:{quarterMin:U().quarterMin, quarters:U().quarters, tracks}};
 }
 document.addEventListener('change', async e => {
   const el = e.target, files = el.files ? [...el.files] : [], f = files[0]; if(!f) return;
@@ -1406,8 +2345,8 @@ async function importFile(file){
 }
 
 // ---------- report actions ----------
-async function copyReport(){
-  const txt = reportText(), box = $('reporttext');
+async function copyReport(text){
+  const txt = text || reportText(), box = $('reporttext');
   try{ await navigator.clipboard.writeText(txt); reportMsg = 'Report copied. Paste it into WhatsApp, email or a message.'; if(box) box.hidden = true; }
   catch(e){ reportMsg = 'Copying isn’t allowed here, so the report is below. Select it and copy.'; if(box){ box.value = txt; box.hidden = false; box.focus(); box.select(); } }
   const m = $('reportmsg'); if(m) m.textContent = reportMsg;
@@ -1432,14 +2371,18 @@ const DEVICE = (() => { try{ let d = localStorage.getItem(LS + '.device'); if(!d
 function stable(v){ return JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => (o[key] = x[key], o), {}) : x); }
 function cloudSchedule(sc){
   const sq = S.squad || {}, lite = p => (p.pid && sq[p.pid] && sq[p.pid].photo && sq[p.pid].photo === p.photo) ? Object.assign({}, p, {photo:'@squad'}) : p;
-  return {name:sc.name, setup:Object.assign({}, sc.setup, {tracks:sc.setup.tracks.map(t => Object.assign({}, t, {players:t.players.map(lite)}))}), others:(sc.others || []).map(lite)};
+  const out = {name:sc.name, setup:Object.assign({}, sc.setup, {tracks:sc.setup.tracks.map(t => Object.assign({}, t, {players:t.players.map(lite)}))}), others:(sc.others || []).map(lite)};
+  if(sc.original) out.original = sc.original;
+  return out;
 }
 function cloudDocs(){
   const m = {};
   S.schedules.forEach(sc => { m['schedules/' + sc.id] = cloudSchedule(sc); });
   Object.keys(S.squad || {}).forEach(k => { m['squad/' + k] = S.squad[k]; });
   S.matches.forEach(x => { m['matches/' + x.id] = x; });
-  m['live/game'] = {game:Object.assign({}, S.game, {history:[]}), activeId:S.activeId};
+  // The game carries its line-up, so a phone that gets the game before the changed schedule can still draw it.
+  m['meta/removed'] = {schedules:S.removed.slice()};
+  m['live/game'] = {game:Object.assign({}, S.game, {history:[]}), activeId:S.activeId, lines:bareLines(U().tracks)};
   return JSON.parse(JSON.stringify(m));
 }
 function setSync(st){ sync.status = st; const el = $('syncstat'); if(el){ el.textContent = {local:'On this phone only', saving:'Saving…', saved:'Backed up', error:'Backup paused'}[st] || ''; el.dataset.st = st; }
@@ -1472,8 +2415,11 @@ async function pushSync(){
 function strip(d){ const o = Object.assign({}, d); delete o._by; delete o._at; return JSON.parse(JSON.stringify(o)); }
 function applyDoc(col, id, body){
   if(col === 'schedules'){
+    if(S.removed.includes(id)) return;
     const sc = S.schedules.find(x => x.id === id);
-    if(sc) Object.assign(sc, {name:body.name, setup:body.setup, others:body.others || []}); else S.schedules.push({id, name:body.name, setup:body.setup, others:body.others || []});
+    const fields = {name:body.name, setup:body.setup, others:body.others || []};
+    if(sc){ Object.assign(sc, fields); if(body.original) sc.original = body.original; else delete sc.original; }
+    else S.schedules.push(Object.assign({id, original:body.original}, fields));
   } else if(col === 'squad'){
     // A new clean photo from another phone replaces that player's picture in every schedule too.
     const before = S.squad[id]; S.squad[id] = body;
@@ -1502,7 +2448,7 @@ function afterRemote(){
 function markGot(key, snap){
   if(snap.metadata && snap.metadata.fromCache) return;
   sync.got.add(key);
-  if(!sync.ready && sync.got.size === 4){
+  if(!sync.ready && sync.got.size === 5){
     sync.ready = true;
     // A phone opening this page for the first time takes the online copy instead of its example board.
     if(FRESH && Object.keys(sync.last).some(p => p.startsWith('schedules/'))){
@@ -1528,6 +2474,16 @@ function startSync(){
       markGot(col, snap);
     }, () => setSync('error'));
   });
+  db.doc('meta/removed').onSnapshot(snap => {
+    const ids = snap.exists ? (strip(snap.data()).schedules || []) : [];
+    const fresh = ids.filter(id => !S.removed.includes(id));
+    if(fresh.length){
+      S.removed = S.removed.concat(fresh);
+      fresh.forEach(id => { if(S.schedules.some(x => x.id === id)) removeDoc('schedules', id); });
+      afterRemote();
+    }
+    markGot('removed', snap);
+  }, () => setSync('error'));
   db.doc('live/game').onSnapshot(snap => {
     if(snap.exists){
       const body = strip(snap.data()), js = stable(body);
@@ -1535,6 +2491,8 @@ function startSync(){
         sync.last['live/game'] = js;
         S.game = body.game; S.game.history = []; // undo only covers this phone's own actions
         if(body.activeId && S.schedules.some(x => x.id === body.activeId)) S.activeId = body.activeId;
+        const g = S.game, fits = g.tr && U().tracks.every(t => g.tr[t.id] && g.acc[t.id] && g.acc[t.id].length === t.players.length) && Object.keys(g.tr).length === U().tracks.length;
+        if(!fits && body.lines && body.activeId === S.activeId) U().tracks = body.lines.map(t => Object.assign({}, t, {players:t.players.map(p => Object.assign({photo:photoFor(p.pid)}, p))}));
         injUI = null; cardUI = null; afterRemote();
       }
     }
@@ -1547,12 +2505,13 @@ if(window.claude && window.claude.use){
 }
 
 // ---------- clicks ----------
-let resetArm = 0;
+let resetArm = 0, resetAsk = false;
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if(!b || b.disabled) return;
   const a = b.dataset.act, u = U();
   // Tap protection: "Swap done" / "Already swapped" need a second tap within 3 s.
-  if(a === 'swap' && S.settings.confirm && !(b.dataset.armed && Date.now() - b.dataset.armed < 3000)){
+  // A line reset always asks for the second tap.
+  if(((a === 'swap' && S.settings.confirm) || a === 'resetline') && !(b.dataset.armed && Date.now() - b.dataset.armed < 3000)){
     const old = b.textContent; b.dataset.armed = Date.now(); b.textContent = 'Tap again to confirm'; b.classList.add('armed');
     setTimeout(() => { if(b.isConnected){ b.textContent = old; delete b.dataset.armed; b.classList.remove('armed'); } }, 3000);
     return;
@@ -1584,11 +2543,59 @@ document.addEventListener('click', e => {
   else if(a === 'swap') swap(b.dataset.id);
   else if(a === 'undo') undo();
   else if(a === 'resetlines') resetLines();
+  else if(a === 'resetline') resetLine(b.dataset.id);
+  else if(a === 'addrule'){ U().rules = rules().concat({type:'min', n:1, pids:[]}); save(); renderSetup(); }
+  else if(a === 'delrule'){ U().rules = rules().filter((r, i) => i !== +b.dataset.i); save(); renderSetup(); renderGame(); }
+  else if(a === 'leopen'){ openLineEdit(); renderGame(); update(); window.scrollTo(0, 0); }
+  else if(a === 'lecancel'){ lineEdit = null; renderGame(); update(); }
+  else if(a === 'leadd'){ lineEdit[+b.dataset.li].players.push({pid:null, name:'', bench:2}); renderGame();
+    const l = lineEdit[+b.dataset.li], f = $(`le-${b.dataset.li}-${l.players.length - 1}-name`); if(f) f.focus(); }
+  else if(a === 'fullopen'){ keepUI = keepUI && keepUI.pid === b.dataset.pid && !keepUI.pick ? null : {pid:b.dataset.pid, pick:null}; renderGame(); }
+  else if(a === 'fullclose'){ keepUI = null; renderGame(); }
+  else if(a === 'spotline'){ keepUI = {pid:b.dataset.pid, mode:'fullswap', pick:{current:true}}; renderGame(); }
+  else if(a === 'placedmove'){ keepUI = {pid:b.dataset.pid, pick:{moveIn:true}}; renderGame(); }
+  else if(a === 'fulloff' || a === 'fullswap'){
+    // Step 1: who comes on. "No one" happens straight away; anyone else goes on to step 2 (where she plays).
+    const pid = b.dataset.pid;
+    if(b.dataset.none){ (a === 'fulloff' ? fullOff : spotSwap)(pid, null); return; }
+    let pick;
+    if(b.dataset.line != null) pick = {line:b.dataset.line, k:+b.dataset.k};
+    else { const inp = $('fullres-' + pid), nm = String(b.dataset.name || (inp ? inp.value : '')).trim(), msg = $('fullmsg-' + pid);
+      if(!isRealName(nm)){ if(inp){ inp.placeholder = 'Type who comes on first'; inp.focus(); } return; }
+      const hit = squadByName(nm) || findSquad(nm, ''), onB = hit && benchCandidates().find(c => c.pid === hit);
+      if(onB) pick = {line:onB.line, k:onB.k};
+      else if(hit && onFieldNow().has(hit)){ if(msg) msg.textContent = `${S.squad[hit].name} is on the field already.`; return; }
+      else pick = {name: hit ? S.squad[hit].name : nm, pid: hit || null}; }
+    // Straight away, in the place picked in the box: the spot, or a line.
+    const place = (keepUI && keepUI.place) || 'spot';
+    (a === 'fulloff' ? fullOff : spotSwap)(pid, pick, place === 'spot' ? 'spot' : 'line', place === 'spot' ? null : place); }
+  else if(a === 'fullplace'){ const ku = keepUI; if(!ku || !ku.pick) return;
+    if(ku.pick.moveIn) placedToLine(ku.pid, b.dataset.line);
+    else if(ku.pick.current) spotToLine(ku.pid, b.dataset.line);
+    else (ku.mode === 'fullswap' ? spotSwap : fullOff)(ku.pid, ku.pick, b.dataset.where, b.dataset.line); }
+  else if(a === 'fullback'){ const k = (G().keep || {})[b.dataset.pid] || {};
+    // No one came on in her place: she just comes back. Otherwise pick who comes off.
+    if(!k.by && !k.toLine) fullBack(b.dataset.pid, null);
+    else { keepUI = {pid:b.dataset.pid, back:true}; renderGame(); } }
+  else if(a === 'fullbackoff') fullBack(b.dataset.pid, b.dataset.who === 'spot' ? null : {line:b.dataset.line, k:+b.dataset.k});
+  else if(a === 'leaddline'){ addDraftLine(); renderGame(); const f = $(`le-${lineEdit.length - 1}-0-name`); if(f){ f.scrollIntoView({block:'center'}); f.focus({preventScroll:true}); } }
+  else if(a === 'leunfull'){ const x = lineEdit.toFull.splice(+b.dataset.i, 1)[0], l = x && lineEdit.find(y => y.id === x.from);
+    if(l) l.players.push({pid:x.pid, name:x.name, bench:+x.bench || 2}); renderGame(); }
+  else if(a === 'ledel'){ lineEdit[+b.dataset.li].players.splice(+b.dataset.k, 1); renderGame(); }
+  else if(a === 'leup'){ const ps = lineEdit[+b.dataset.li].players, k = +b.dataset.k; [ps[k - 1], ps[k]] = [ps[k], ps[k - 1]]; renderGame(); }
+  else if(a === 'leapply' || a === 'leorig'){
+    const err = applyLines(a === 'leorig' ? clone(sched().original) : lineEdit);
+    if(err){ lineMsg = err; const el = $('lemsg'); if(el) el.textContent = err; }
+  }
+  else if(a === 'viewmatch'){ openMatch = openMatch === b.dataset.mid ? null : b.dataset.mid; renderMinutes(); }
+  else if(a === 'copymatch'){ const m = S.matches.find(x => x.id === b.dataset.mid); if(m) copyReport(savedReport(m)); }
   else if(a === 'injopen'){ injUI = injUI && injUI.id === b.dataset.id ? null : {id:b.dataset.id, k:null}; cardUI = null; renderGame(); update(); }
   else if(a === 'injpick'){ injUI = {id:b.dataset.id, k:+b.dataset.k}; renderGame(); update(); }
   else if(a === 'injclose'){ injUI = null; renderGame(); update(); }
   else if(a === 'injbench') injure(b.dataset.id, +b.dataset.k, 'bench');
-  else if(a === 'injres'){ const inp = $('res-' + b.dataset.id); injure(b.dataset.id, +b.dataset.k, 'reserve', inp ? inp.value : ''); }
+  else if(a === 'injres'){ const inp = $('res-' + b.dataset.id), nm = String(b.dataset.name || (inp ? inp.value : '')).trim();
+    if(!isRealName(nm)){ const m = $('resmsg-' + b.dataset.id); if(m) m.textContent = 'Type the reserve’s name first, so their minutes go to the right person.'; if(inp) inp.focus(); return; }
+    injure(b.dataset.id, +b.dataset.k, 'reserve', nm); }
   else if(a === 'back') backOn(b.dataset.id, +b.dataset.k);
   else if(a === 'stagger') autoStagger();
   else if(a === 'addp'){ const t = track(b.dataset.id); t.players.push({name:`${t.name} ${t.players.length+1}`, bench:2}); structural(); }
@@ -1601,7 +2608,7 @@ document.addEventListener('click', e => {
   else if(a === 'snew'){ const id = 's' + Date.now();
     S.schedules.push({id, name:'New schedule', setup:{quarterMin:u.quarterMin, quarters:u.quarters, tracks:[{id:'t'+Date.now(), name:'Line 1', color:'#E3262B', offset:0, players:[{name:'Player 1',bench:3},{name:'Player 2',bench:3},{name:'Player 3',bench:3}]}]}});
     S.activeId = id; structural(); }
-  else if(a === 'sdel'){ S.schedules = S.schedules.filter(x => x.id !== S.activeId); S.activeId = S.schedules[0].id; structural(); }
+  else if(a === 'sdel'){ S.removed = [...new Set(S.removed.concat(S.activeId))]; S.schedules = S.schedules.filter(x => x.id !== S.activeId); S.activeId = S.schedules[0].id; structural(); }
   else if(a === 'stopread'){ if(readCtl) readCtl.abort(); }
   else if(a === 'sqdel'){ delete S.squad[b.dataset.pid]; save(); renderSquad(); }
   else if(a === 'exportdata') exportFile();
@@ -1616,9 +2623,24 @@ document.addEventListener('click', e => {
   else if(a === 'call') callSwap(b.dataset.id);
   else if(a === 'cancel') cancelCall(b.dataset.id);
   else if(a === 'reset'){
+    // A match with minutes that isn't in the season log yet: ask first, so its minutes aren't lost.
+    const g = G();
+    if(g.phase !== 'pre' && !g.practice && !isSaved(g)){ resetAsk = true; renderSetup(); const el = $('resetask'); if(el) el.scrollIntoView({block:'center'}); return; }
     if(Date.now() - resetArm < 3000){ S.game = newGame(U()); resetArm = 0; save(); show(); }
     else { resetArm = Date.now(); b.textContent = 'Tap again to reset'; setTimeout(() => { if(b.isConnected) b.textContent = 'Reset game'; }, 3000); }
   }
+  else if(a === 'resetsave'){ recordMatch(); S.game = newGame(U()); resetAsk = false; save(); show(); }
+  else if(a === 'resetnosave'){ S.game = newGame(U()); resetAsk = false; save(); show(); }
+  else if(a === 'resetcancel'){ resetAsk = false; renderSetup(); }
+  else if(a === 'fixmatch'){ fixMatch = b.dataset.mid; renderMinutes(); }
+  else if(a === 'fixcancel'){ fixMatch = null; renderMinutes(); }
+  else if(a === 'fixsave'){ const m = S.matches.find(x => x.id === b.dataset.mid); if(!m) return;
+    // Corrected minutes (m:ss or whole minutes); the match is then marked as corrected and never overwritten.
+    let bad = false;
+    m.rows.forEach((r, i) => { const el = $(`fix-${i}`); if(!el) return; const v = el.value.trim(), mm = v.match(/^(\d{1,3})(?::(\d{1,2}))?$/);
+      if(!mm){ bad = true; el.classList.add('bad'); return; } r.played = (+mm[1]) * 60 + (+(mm[2] || 0)); });
+    if(bad){ const el = $('fixmsg'); if(el) el.textContent = 'Write minutes like 12:30 or 12.'; return; }
+    m.edited = true; fixMatch = null; save(); renderMinutes(); }
 });
 function structural(){ ensureSquad(); S.game = newGame(U()); save(); show(); }
 
@@ -1631,6 +2653,30 @@ function renderSquad(){
 }
 document.addEventListener('change', e => {
   const id = e.target.id; let m;
+  if(m = id.match(/^le-(\d+)-(lname|lcolor)$/)){ const l = lineEdit && lineEdit[+m[1]]; if(!l) return;
+    const v = e.target.value; if(m[2] === 'lcolor'){ const was = PALETTE.find(p => p[1] === l.color); l.color = v; if(!l.named && was && l.name === was[0]) l.name = (PALETTE.find(p => p[1] === v) || [l.name])[0]; }
+    else { l.name = v.trim() || l.name; l.named = true; }
+    renderGame(); return; }
+  if(m = id.match(/^rule-(\d+)-(type|n)$/) || id.match(/^rule-(\d+)-p-(.+)$/)){ const r = rules()[+m[1]]; if(!r) return;
+    if(m[2] === 'type') r.type = e.target.value === 'max' ? 'max' : 'min';
+    else if(m[2] === 'n') r.n = Math.max(0, Math.round(+e.target.value || 0));
+    else r.pids = e.target.checked ? [...new Set(r.pids.concat(m[2]))] : r.pids.filter(p => p !== m[2]);
+    save(); renderSetup(); renderGame(); return; }
+  if(m = id.match(/^fullline-(.+)$/)){ if(keepUI) keepUI.place = e.target.value; return; }
+  if(m = id.match(/^le-(\d+)-(\d+)-name$/)){ const p = lineEdit && lineEdit[+m[1]] && lineEdit[+m[1]].players[+m[2]]; if(!p) return;
+    // A name the squad knows (small typos included) links to that player, so she can be moved out of her old line.
+    const nm = e.target.value.trim(), pid = nm ? (squadByName(nm) || findSquad(nm, '')) : null;
+    p.name = nm; p.pid = pid || null; p.typed = Date.now();
+    if(pid){ p.name = S.squad[pid].name; e.target.value = p.name; }
+    showMoves(); return; }
+  if(m = id.match(/^le-(\d+)-(\d+)-move$/)){ const from = lineEdit && lineEdit[+m[1]], v = e.target.value; if(!from) return;
+    // Full game: she stops swapping and plays on. Reserves: she's off, available as a reserve.
+    if(v === 'full' || v === 'res'){ const p = from.players.splice(+m[2], 1)[0];
+      if(v === 'full' && p && String(p.name || '').trim()){ const pid = p.pid || squadByName(p.name) || findSquad(p.name, '') || null;
+        lineEdit.toFull.push({pid, name: pid && S.squad[pid] ? S.squad[pid].name : p.name, from:from.id, bench:p.bench}); }
+      renderGame(); return; }
+    const to = lineEdit[+v]; if(!to || from === to) return;
+    to.players.push(from.players.splice(+m[2], 1)[0]); renderGame(); return; }
   if(m = id.match(/^p-(.+)-(\d+)-name$/)){ const t = track(m[1]), p = t && t.players[+m[2]]; if(!p) return;
     couple(p); syncSquadPhotos(); e.target.value = p.name; save(); renderSetup(); renderGame(); update(); }
   else if(m = id.match(/^o-(\d+)-name$/)){ const o = (sched().others || [])[+m[1]]; if(!o) return;
